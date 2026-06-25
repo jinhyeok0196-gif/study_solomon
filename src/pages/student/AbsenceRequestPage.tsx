@@ -1,11 +1,21 @@
-import { PagePlaceholder } from '@/components/shared/PagePlaceholder';
+import { useAuth } from '@/hooks/useAuth';
+import { RequestForm } from '@/features/requests/components/RequestForm';
+import { RequestList } from '@/features/requests/components/RequestList';
 
 export default function AbsenceRequestPage() {
+  const { user } = useAuth();
+
   return (
-    <PagePlaceholder
-      title="결석 신청"
-      description="날짜, 교시, 사유를 입력해 결석을 신청합니다."
-      stage="4단계: 학생 페이지 구현 예정"
-    />
+    <div className="flex flex-col gap-6 p-4">
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900">결석 신청</h2>
+        <p className="mt-1 text-sm text-gray-500">날짜, 교시, 사유를 입력해 결석을 신청합니다.</p>
+      </div>
+      <RequestForm kind="absence" studentId={user!.id} />
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-gray-700">신청 내역</h3>
+        <RequestList kind="absence" studentId={user!.id} />
+      </div>
+    </div>
   );
 }
