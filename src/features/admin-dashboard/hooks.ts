@@ -5,6 +5,6 @@ export function useDashboardSummaryQuery() {
   return useQuery({
     queryKey: ['admin-dashboard-summary'],
     queryFn: fetchDashboardSummary,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000, // realtime sync covers live updates; this is a fallback if a channel drops
   });
 }

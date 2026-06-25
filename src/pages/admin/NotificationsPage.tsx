@@ -1,19 +1,23 @@
 import { useAdminNotificationsQuery, useMarkNotificationReadMutation } from '@/features/notifications/hooks';
+import { useRealtimeTableSync } from '@/hooks/useRealtimeTableSync';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 
+const NOTIFICATIONS_KEY = ['admin-notifications'];
+
 export default function NotificationsPage() {
   const { data: notifications, isLoading } = useAdminNotificationsQuery();
   const markReadMutation = useMarkNotificationReadMutation();
+
+  useRealtimeTableSync('notifications', [NOTIFICATIONS_KEY]);
 
   return (
     <div className="flex flex-col gap-4">
       <h2 className="text-lg font-semibold text-gray-900">알림 센터</h2>
       <p className="text-sm text-gray-500">
-        외출/복귀, 파워냅 시작/종료, 무단결석, 경고 발생 등의 실시간 알림은 6단계(실시간 기능 구현)에서
-        자동으로 채워집니다. 현재는 누적된 알림을 조회하고 읽음 처리만 가능합니다.
+        외출/복귀, 파워냅 시작/종료, 무단결석, 경고/퇴원 발생 시 알림이 실시간으로 도착합니다.
       </p>
 
       {isLoading ? (

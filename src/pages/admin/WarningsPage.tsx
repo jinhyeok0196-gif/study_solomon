@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useStudentsQuery } from '@/features/admin-students/hooks';
 import { useManualExpelMutation, useWarningRecordsFeedQuery } from '@/features/admin-warning/hooks';
+import { useRealtimeTableSync } from '@/hooks/useRealtimeTableSync';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -13,6 +14,8 @@ export default function WarningsPage() {
   const { data: students } = useStudentsQuery();
   const { data: records } = useWarningRecordsFeedQuery();
   const expelMutation = useManualExpelMutation();
+
+  useRealtimeTableSync('warning_records', [['admin-warning-records']]);
 
   const [studentId, setStudentId] = useState('');
   const [note, setNote] = useState('');

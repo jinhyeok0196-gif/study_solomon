@@ -5,7 +5,7 @@ export function useAdminNotificationsQuery() {
   return useQuery({
     queryKey: ['admin-notifications'],
     queryFn: fetchAdminNotifications,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000, // realtime sync covers live updates; this is a fallback if a channel drops
   });
 }
 

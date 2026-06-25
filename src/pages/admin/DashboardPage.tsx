@@ -1,8 +1,12 @@
 import { useDashboardSummaryQuery } from '@/features/admin-dashboard/hooks';
 import { useAdminNotificationsQuery } from '@/features/notifications/hooks';
+import { useRealtimeTableSync } from '@/hooks/useRealtimeTableSync';
 import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
+
+const DASHBOARD_KEY = ['admin-dashboard-summary'];
+const NOTIFICATIONS_KEY = ['admin-notifications'];
 
 const SUMMARY_CARDS = [
   { key: 'expectedTodayCount', label: '오늘 출석 예정' },
@@ -18,6 +22,11 @@ export default function DashboardPage() {
   const { data: summary, isLoading } = useDashboardSummaryQuery();
   const { data: notifications } = useAdminNotificationsQuery();
   const recentNotifications = notifications?.slice(0, 5);
+
+  useRealtimeTableSync('bathroom_logs', [DASHBOARD_KEY]);
+  useRealtimeTableSync('power_nap_logs', [DASHBOARD_KEY]);
+  useRealtimeTableSync('attendance_records', [DASHBOARD_KEY]);
+  useRealtimeTableSync('notifications', [NOTIFICATIONS_KEY]);
 
   if (isLoading || !summary) {
     return (

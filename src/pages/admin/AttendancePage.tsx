@@ -4,6 +4,7 @@ import { useStudentsQuery } from '@/features/admin-students/hooks';
 import { useScheduleForDateQuery } from '@/features/admin-schedule/hooks';
 import { useAttendanceForDateQuery, useUpsertAttendanceMutation } from '@/features/admin-attendance/hooks';
 import { ATTENDANCE_STATUS_LABEL } from '@/features/attendance/labels';
+import { useRealtimeTableSync } from '@/hooks/useRealtimeTableSync';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
@@ -19,6 +20,8 @@ export default function AttendancePage() {
   const { data: scheduleEntries, isLoading: isScheduleLoading } = useScheduleForDateQuery(date);
   const { data: attendanceRecords } = useAttendanceForDateQuery(date);
   const upsertMutation = useUpsertAttendanceMutation(date);
+
+  useRealtimeTableSync('attendance_records', [['admin-attendance-by-date', date]]);
 
   const studentNameById = useMemo(
     () => new Map((students ?? []).map((student) => [student.id, student.name])),

@@ -704,7 +704,17 @@ export type Database = {
     }
     Functions: {
       current_user_role: { Args: never; Returns: string }
+      detect_unauthorized_absences: { Args: never; Returns: undefined }
       is_admin: { Args: never; Returns: boolean }
+      notify_admins: {
+        Args: {
+          p_message: string
+          p_related_student_id: string
+          p_title: string
+          p_type: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
