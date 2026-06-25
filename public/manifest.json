@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "솔로몬스터디카페",
+  "name": "솔로몬스터디카페 관리 시스템",
   "icons": [
     {
       "src": "favicon.ico",
@@ -15,11 +15,14 @@
     {
       "src": "logo512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "theme_color": "#000000",
+  "orientation": "portrait",
+  "theme_color": "#2563eb",
   "background_color": "#ffffff"
 }
