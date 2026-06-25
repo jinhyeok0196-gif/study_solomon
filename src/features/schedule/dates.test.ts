@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { formatWeekRangeLabel, getWeekStartDate, listRecentWeekStartDates } from './dates';
+import {
+  dayOfWeekKeyOf,
+  formatWeekRangeLabel,
+  getWeekStartDate,
+  listRecentWeekStartDates,
+  weekStartDateOf,
+} from './dates';
 
 describe('getWeekStartDate', () => {
   it('returns the Monday of the current week for offset 0', () => {
@@ -29,5 +35,21 @@ describe('listRecentWeekStartDates', () => {
       '2026-06-15',
       '2026-06-08',
     ]);
+  });
+});
+
+describe('weekStartDateOf', () => {
+  it('returns the Monday of the week containing the given date', () => {
+    expect(weekStartDateOf('2026-06-25')).toBe('2026-06-22');
+    expect(weekStartDateOf('2026-06-22')).toBe('2026-06-22');
+    expect(weekStartDateOf('2026-06-28')).toBe('2026-06-22');
+  });
+});
+
+describe('dayOfWeekKeyOf', () => {
+  it('maps a date string to its day-of-week key', () => {
+    expect(dayOfWeekKeyOf('2026-06-22')).toBe('mon');
+    expect(dayOfWeekKeyOf('2026-06-25')).toBe('thu');
+    expect(dayOfWeekKeyOf('2026-06-28')).toBe('sun');
   });
 });

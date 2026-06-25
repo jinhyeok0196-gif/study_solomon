@@ -22,3 +22,11 @@ export function formatWeekRangeLabel(weekStartDate: string): string {
 export function listRecentWeekStartDates(count: number, base: Date = new Date()): string[] {
   return Array.from({ length: count }, (_, index) => getWeekStartDate(-index, base));
 }
+
+export function weekStartDateOf(dateStr: string): string {
+  return format(startOfWeek(new Date(`${dateStr}T00:00:00`), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+}
+
+export function dayOfWeekKeyOf(dateStr: string): DayOfWeek {
+  return todayDayOfWeekKey(new Date(`${dateStr}T00:00:00`));
+}

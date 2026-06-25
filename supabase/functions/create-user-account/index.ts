@@ -1,13 +1,8 @@
 // 관리자가 학생/관리자 계정을 발급하는 전용 엔드포인트.
 // 회원가입 폼 없이 운영자가 직접 계정을 만드는 관리형 스터디카페 운영 방식에 맞춰,
 // service role 권한으로 auth 계정과 public.users/student_profiles row를 함께 생성한다.
-import { createClient } from 'npm:@supabase/supabase-js@2';
 import { phoneToAuthEmail, normalizePhone } from '../_shared/phone.ts';
-
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { CORS_HEADERS, jsonResponse, requireAdmin } from '../_shared/adminAuth.ts';
 
 interface CreateUserAccountPayload {
   phone: string;
@@ -22,45 +17,14 @@ interface CreateUserAccountPayload {
   };
 }
 
-function jsonResponse(body: unknown, status: number) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-  });
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: CORS_HEADERS });
   }
 
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader) {
-    return jsonResponse({ error: '인증이 필요합니다.' }, 401);
-  }
-
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-  const callerClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-
-  const { data: callerData, error: callerError } = await callerClient.auth.getUser();
-  if (callerError || !callerData.user) {
-    return jsonResponse({ error: '유효하지 않은 인증 정보입니다.' }, 401);
-  }
-
-  const { data: callerProfile } = await callerClient
-    .from('users')
-    .select('role')
-    .eq('id', callerData.user.id)
-    .maybeSingle();
-
-  if (callerProfile?.role !== 'admin') {
-    return jsonResponse({ error: '관리자만 계정을 생성할 수 있습니다.' }, 403);
-  }
+  const auth = await requireAdmin(req);
+  if (!auth.ok) return auth.response;
+  const { adminClient } = auth;
 
   const payload = (await req.json()) as CreateUserAccountPayload;
   if (!payload.phone || !payload.name || !payload.password || !payload.role) {
@@ -70,7 +34,6 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: '비밀번호는 6자 이상이어야 합니다.' }, 400);
   }
 
-  const adminClient = createClient(supabaseUrl, serviceRoleKey);
   const normalizedPhone = normalizePhone(payload.phone);
 
   const { data: createdAuthUser, error: createAuthError } = await adminClient.auth.admin.createUser({

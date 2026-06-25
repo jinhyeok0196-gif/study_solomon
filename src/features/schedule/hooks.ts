@@ -6,6 +6,7 @@ export function useWeeklyScheduleQuery(studentId: string, weekStartDate: string)
   return useQuery({
     queryKey: ['weekly-schedule', studentId, weekStartDate],
     queryFn: () => fetchWeeklySchedule(studentId, weekStartDate),
+    enabled: Boolean(studentId),
   });
 }
 
