@@ -1,12 +1,20 @@
 import type { ReactNode } from 'react';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 import type { UserRole } from '@/types/domain';
 
 interface RoleGuardProps {
   role: UserRole;
+  fallback: string;
   children: ReactNode;
 }
 
-// 역할 기반 접근 제어는 3단계(인증 시스템 구현)에서 채워집니다.
-export function RoleGuard({ children }: RoleGuardProps) {
+export function RoleGuard({ role, fallback, children }: RoleGuardProps) {
+  const { user } = useAuth();
+
+  if (user && user.role !== role) {
+    return <Navigate to={fallback} replace />;
+  }
+
   return <>{children}</>;
 }

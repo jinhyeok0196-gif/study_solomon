@@ -4,6 +4,7 @@ import { AdminLayout } from '@/components/layout/AdminLayout';
 import { ProtectedRoute } from '@/components/shared/ProtectedRoute';
 import { RoleGuard } from '@/components/shared/RoleGuard';
 import { NotFoundPage } from '@/components/shared/NotFoundPage';
+import { STUDENT_PATHS, ADMIN_PATHS } from '@/routes/paths';
 
 import StudentLoginPage from '@/pages/student/LoginPage';
 import StudentDashboardPage from '@/pages/student/DashboardPage';
@@ -34,8 +35,8 @@ export function AppRouter() {
 
       <Route
         element={
-          <ProtectedRoute>
-            <RoleGuard role="student">
+          <ProtectedRoute redirectTo={STUDENT_PATHS.login}>
+            <RoleGuard role="student" fallback={ADMIN_PATHS.dashboard}>
               <StudentLayout />
             </RoleGuard>
           </ProtectedRoute>
@@ -55,8 +56,8 @@ export function AppRouter() {
       <Route
         path="/admin"
         element={
-          <ProtectedRoute>
-            <RoleGuard role="admin">
+          <ProtectedRoute redirectTo={ADMIN_PATHS.login}>
+            <RoleGuard role="admin" fallback={STUDENT_PATHS.dashboard}>
               <AdminLayout />
             </RoleGuard>
           </ProtectedRoute>

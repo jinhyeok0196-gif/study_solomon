@@ -1,25 +1,66 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { supabase } from '@/lib/supabase/client';
+import { fetchUserProfile, signInWithPhone, signOutCurrentUser } from '@/features/auth/api';
 import type { AuthenticatedUser } from '@/types/domain';
 
 interface AuthContextValue {
   user: AuthenticatedUser | null;
   isLoading: boolean;
-  login: (phone: string, password: string) => Promise<void>;
+  login: (phone: string, password: string) => Promise<AuthenticatedUser>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-// 실제 Supabase Auth 연동은 3단계(인증 시스템 구현)에서 채워집니다.
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AuthenticatedUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function syncUserFromSession(userId: string | undefined) {
+      if (!userId) {
+        if (isMounted) setUser(null);
+        return;
+      }
+      const profile = await fetchUserProfile(userId);
+      if (isMounted) setUser(profile);
+    }
+
+    supabase.auth.getSession().then(({ data }) => {
+      syncUserFromSession(data.session?.user.id).finally(() => {
+        if (isMounted) setIsLoading(false);
+      });
+    });
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      syncUserFromSession(session?.user.id);
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.subscription.unsubscribe();
+    };
+  }, []);
+
   const value: AuthContextValue = {
-    user: null,
-    isLoading: false,
-    login: async () => {
-      throw new Error('인증 시스템이 아직 연동되지 않았습니다 (3단계에서 구현 예정).');
+    user,
+    isLoading,
+    login: async (phone, password) => {
+      await signInWithPhone(phone, password);
+      const { data } = await supabase.auth.getUser();
+      const profile = data.user ? await fetchUserProfile(data.user.id) : null;
+      if (!profile) {
+        await signOutCurrentUser();
+        throw new Error('계정 정보를 찾을 수 없습니다. 관리자에게 문의해주세요.');
+      }
+      setUser(profile);
+      return profile;
     },
     logout: async () => {
-      throw new Error('인증 시스템이 아직 연동되지 않았습니다 (3단계에서 구현 예정).');
+      await signOutCurrentUser();
+      setUser(null);
     },
   };
 

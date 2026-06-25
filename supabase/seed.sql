@@ -19,3 +19,44 @@ insert into public.system_settings (key, value, description) values
   ('warning_threshold_expulsion', '30', '퇴원 처리 누적 벌점'),
   ('penalty_monthly_reset_day', '1', '매월 벌점 초기화 기준일(1=매월 1일)')
 on conflict (key) do nothing;
+
+-- =========================================================================
+-- 로컬 개발용 최초 관리자 계정 (운영 환경에는 적용되지 않음 — supabase db reset 으로
+-- 로컬 스택에만 생성됨). 전화번호 01000000000 / 비밀번호 admin1234.
+-- 이후 계정 생성은 supabase/functions/create-user-account 를 통해서만 이루어진다.
+-- =========================================================================
+insert into auth.users (
+  instance_id, id, aud, role, email, encrypted_password,
+  email_confirmed_at, last_sign_in_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+  confirmation_token, email_change, email_change_token_new, recovery_token
+) values (
+  '00000000-0000-0000-0000-000000000000',
+  '00000000-0000-0000-0000-000000000001',
+  'authenticated',
+  'authenticated',
+  'p01000000000@members.solomonstudycafe.internal',
+  crypt('admin1234', gen_salt('bf')),
+  now(), now(),
+  '{"provider":"email","providers":["email"]}',
+  '{"name":"운영자"}',
+  now(), now(),
+  '', '', '', ''
+)
+on conflict (id) do nothing;
+
+insert into auth.identities (
+  id, provider_id, user_id, identity_data, provider, created_at, updated_at
+) values (
+  gen_random_uuid(),
+  '00000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000001',
+  '{"sub":"00000000-0000-0000-0000-000000000001","email":"p01000000000@members.solomonstudycafe.internal"}',
+  'email',
+  now(), now()
+)
+on conflict do nothing;
+
+insert into public.users (id, role, name, phone) values
+  ('00000000-0000-0000-0000-000000000001', 'admin', '운영자', '01000000000')
+on conflict (id) do nothing;
