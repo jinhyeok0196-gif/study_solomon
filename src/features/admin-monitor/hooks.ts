@@ -1,26 +1,26 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchActiveOuting, fetchActivePowerNap, fetchTodayAttendanceSummary } from './api';
+import { fetchSeatLayouts, fetchMonitorStudents, fetchRecentEvents } from './api';
 
-export function useActiveOutingQuery() {
+export function useSeatLayoutsQuery() {
   return useQuery({
-    queryKey: ['admin-monitor-outing'],
-    queryFn: fetchActiveOuting,
-    staleTime: Infinity,
+    queryKey: ['seat-layouts'],
+    queryFn: fetchSeatLayouts,
+    staleTime: Infinity, // 좌석 배치는 거의 변경되지 않음
   });
 }
 
-export function useActivePowerNapQuery() {
+export function useMonitorStudentsQuery() {
   return useQuery({
-    queryKey: ['admin-monitor-powernap'],
-    queryFn: fetchActivePowerNap,
-    staleTime: Infinity,
+    queryKey: ['admin-monitor-students'],
+    queryFn: fetchMonitorStudents,
+    staleTime: Infinity, // Realtime이 캐시 직접 관리
   });
 }
 
-export function useTodayAttendanceSummaryQuery() {
+export function useEventLogQuery() {
   return useQuery({
-    queryKey: ['admin-monitor-attendance-summary'],
-    queryFn: fetchTodayAttendanceSummary,
+    queryKey: ['admin-monitor-events'],
+    queryFn: () => fetchRecentEvents(40),
     staleTime: Infinity,
   });
 }

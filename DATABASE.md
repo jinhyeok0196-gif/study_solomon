@@ -27,6 +27,7 @@ Supabase(PostgreSQL) 기반. 모든 테이블은 `public` 스키마에 위치합
 | `chat_messages` | 채팅 메시지 |
 | `message_reads` | 메시지 읽음 확인 |
 | `quick_replies` | 관리자용 빠른 답변 템플릿 |
+| `seat_layouts` | 물리적 좌석 배치 (실시간 관제판, 향후 드래그앤드롭 편집) |
 
 ---
 
@@ -54,6 +55,7 @@ enrollment_date       date
 membership_status     text      -- 'active' | 'paused' | 'expelled'
 current_penalty_points smallint  DEFAULT 0  -- 비정규화 캐시
 warning_count         smallint  DEFAULT 0  -- 비정규화 캐시
+seat_number           int       NULL  -- seat_layouts.seat_number 참조 (배정 좌석)
 memo                  text      NULL
 created_at            timestamptz
 updated_at            timestamptz
@@ -248,6 +250,23 @@ sort_order  smallint  DEFAULT 0
 created_at  timestamptz
 ```
 
+### seat_layouts
+```sql
+id            uuid      PK
+seat_number   int       UNIQUE  -- 좌석 번호 (student_profiles.seat_number 참조 대상)
+display_name  text      -- 좌석 표시명 (예: '3번')
+pos_x         int       DEFAULT 0  -- 그리드 X 좌표
+pos_y         int       DEFAULT 0  -- 그리드 Y 좌표 (통로는 +2 간격으로 표현)
+width         int       DEFAULT 1  -- 좌석 너비 (그리드 단위)
+height        int       DEFAULT 1  -- 좌석 높이
+rotation      int       DEFAULT 0  -- 회전 각도 (향후 드래그앤드롭 편집용)
+is_active     boolean   DEFAULT true
+sort_order    int       DEFAULT 0
+created_at    timestamptz
+updated_at    timestamptz
+-- REPLICA IDENTITY FULL (Realtime), publication 등록됨
+```
+
 ---
 
 ## RLS 정책 원칙
@@ -285,6 +304,7 @@ public.current_user_role() -- 현재 사용자 role 반환
 | `chat_messages` | 본인 채팅방만 | 본인 채팅방만 | 전체 |
 | `message_reads` | 본인만 | 본인만 | 전체 |
 | `quick_replies` | X | X | 전체 |
+| `seat_layouts` | O (전체) | X | 전체 |
 
 ---
 
@@ -298,10 +318,13 @@ ALTER PUBLICATION supabase_realtime ADD TABLE
   attendance_records,
   chat_messages,
   message_reads,
-  chat_rooms;
+  chat_rooms,
+  seat_layouts,
+  student_profiles;
 ```
 
-`chat_messages`, `message_reads`, `chat_rooms` — `REPLICA IDENTITY FULL` 적용됨
+`chat_messages`, `message_reads`, `chat_rooms`, `seat_layouts` — `REPLICA IDENTITY FULL` 적용됨
+`student_profiles` — 좌석 배정(`seat_number`) 변경을 관제 화면에 실시간 반영하기 위해 추가
 
 ---
 
@@ -352,4 +375,5 @@ ALTER PUBLICATION supabase_realtime ADD TABLE
 20260629_chat.sql                          -- 채팅 시스템
 20260630_chat_storage.sql                  -- Storage 버킷 설정
 20260701_chat_replica_identity.sql         -- Realtime REPLICA IDENTITY
+20260702_seat_layouts.sql                  -- 좌석 배치 + student_profiles.seat_number
 ```

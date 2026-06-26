@@ -572,6 +572,51 @@ export type Database = {
           },
         ]
       }
+      seat_layouts: {
+        Row: {
+          created_at: string
+          display_name: string
+          height: number
+          id: string
+          is_active: boolean
+          pos_x: number
+          pos_y: number
+          rotation: number
+          seat_number: number
+          sort_order: number
+          updated_at: string
+          width: number
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          height?: number
+          id?: string
+          is_active?: boolean
+          pos_x?: number
+          pos_y?: number
+          rotation?: number
+          seat_number: number
+          sort_order?: number
+          updated_at?: string
+          width?: number
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          height?: number
+          id?: string
+          is_active?: boolean
+          pos_x?: number
+          pos_y?: number
+          rotation?: number
+          seat_number?: number
+          sort_order?: number
+          updated_at?: string
+          width?: number
+        }
+        Relationships: []
+      }
       student_profiles: {
         Row: {
           created_at: string
@@ -586,6 +631,7 @@ export type Database = {
           membership_end_date: string | null
           memo: string | null
           school: string | null
+          seat_number: number | null
           student_number: string | null
           updated_at: string
           warning_count: number
@@ -603,6 +649,7 @@ export type Database = {
           membership_end_date?: string | null
           memo?: string | null
           school?: string | null
+          seat_number?: number | null
           student_number?: string | null
           updated_at?: string
           warning_count?: number
@@ -620,6 +667,7 @@ export type Database = {
           membership_end_date?: string | null
           memo?: string | null
           school?: string | null
+          seat_number?: number | null
           student_number?: string | null
           updated_at?: string
           warning_count?: number

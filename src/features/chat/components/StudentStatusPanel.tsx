@@ -108,9 +108,10 @@ function SectionHeader({ title }: { title: string }) {
 interface Props {
   studentId: string;
   roomId: string | null;
+  className?: string;
 }
 
-export function StudentStatusPanel({ studentId, roomId }: Props) {
+export function StudentStatusPanel({ studentId, roomId, className }: Props) {
   const { user } = useAuth();
   const adminId = user!.id;
   const qc = useQueryClient();
@@ -188,9 +189,11 @@ export function StudentStatusPanel({ studentId, roomId }: Props) {
   const [attendanceForm, setAttendanceForm] = useState({ periodNumber: 1, status: 'present' });
   const [announcementText, setAnnouncementText] = useState('');
 
+  const outerClass = className ?? 'w-72 flex-shrink-0 border-l border-gray-200';
+
   if (studentLoading) {
     return (
-      <div className="w-72 flex-shrink-0 border-l border-gray-200 bg-white flex items-center justify-center">
+      <div className={cn('flex flex-col bg-white overflow-hidden items-center justify-center', outerClass)}>
         <Spinner />
       </div>
     );
@@ -210,7 +213,7 @@ export function StudentStatusPanel({ studentId, roomId }: Props) {
   const currentSlot = scheduleStatus.currentSlot;
 
   return (
-    <div className="w-72 flex-shrink-0 flex flex-col border-l border-gray-200 bg-white overflow-hidden">
+    <div className={cn('flex flex-col bg-white overflow-hidden', outerClass)}>
       <div className="flex-1 overflow-y-auto px-3 py-3">
 
         {/* 기본 정보 */}
