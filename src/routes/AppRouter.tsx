@@ -16,6 +16,7 @@ import LeaveRequestPage from '@/pages/student/LeaveRequestPage';
 import OutingPage from '@/pages/student/OutingPage';
 import PowerNapPage from '@/pages/student/PowerNapPage';
 import PenaltyPage from '@/pages/student/PenaltyPage';
+import MyPage from '@/pages/student/MyPage';
 
 import AuthCallbackPage from '@/pages/auth/CallbackPage';
 import AuthRegisterPage from '@/pages/auth/RegisterPage';
@@ -28,6 +29,7 @@ import AdminAttendancePage from '@/pages/admin/AttendancePage';
 import PenaltiesPage from '@/pages/admin/PenaltiesPage';
 import WarningsPage from '@/pages/admin/WarningsPage';
 import NotificationsPage from '@/pages/admin/NotificationsPage';
+import RequestsPage from '@/pages/admin/RequestsPage';
 
 export function AppRouter() {
   return (
@@ -55,6 +57,7 @@ export function AppRouter() {
         <Route path="/outing" element={<OutingPage />} />
         <Route path="/power-nap" element={<PowerNapPage />} />
         <Route path="/penalty" element={<PenaltyPage />} />
+        <Route path="/mypage" element={<MyPage />} />
       </Route>
 
       <Route
@@ -75,6 +78,7 @@ export function AppRouter() {
         <Route path="penalties" element={<PenaltiesPage />} />
         <Route path="warnings" element={<WarningsPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="requests" element={<RequestsPage />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />

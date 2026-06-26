@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { to: ADMIN_PATHS.penalties, label: '벌점 관리' },
   { to: ADMIN_PATHS.warnings, label: '경고 관리' },
   { to: ADMIN_PATHS.notifications, label: '알림' },
+  { to: ADMIN_PATHS.requests, label: '회원 요청 관리' },
 ];
 
 export function AdminSidebar() {

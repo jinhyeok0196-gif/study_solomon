@@ -186,6 +186,63 @@ export type Database = {
           },
         ]
       }
+      request_logs: {
+        Row: {
+          id: string
+          student_id: string
+          request_type: string
+          status: string
+          new_value: string | null
+          reason: string
+          admin_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          student_id: string
+          request_type: string
+          status?: string
+          new_value?: string | null
+          reason: string
+          admin_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          student_id?: string
+          request_type?: string
+          status?: string
+          new_value?: string | null
+          reason?: string
+          admin_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_logs_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_logs_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bathroom_logs: {
         Row: {
           created_at: string
@@ -506,6 +563,9 @@ export type Database = {
           guardian_phone: string | null
           id: string
           membership_status: string
+          membership_type: string | null
+          membership_start_date: string | null
+          membership_end_date: string | null
           memo: string | null
           school: string | null
           student_number: string | null
@@ -520,6 +580,9 @@ export type Database = {
           guardian_phone?: string | null
           id: string
           membership_status?: string
+          membership_type?: string | null
+          membership_start_date?: string | null
+          membership_end_date?: string | null
           memo?: string | null
           school?: string | null
           student_number?: string | null
@@ -534,6 +597,9 @@ export type Database = {
           guardian_phone?: string | null
           id?: string
           membership_status?: string
+          membership_type?: string | null
+          membership_start_date?: string | null
+          membership_end_date?: string | null
           memo?: string | null
           school?: string | null
           student_number?: string | null
@@ -703,6 +769,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      approve_request_log: {
+        Args: { p_request_id: string; p_admin_id: string; p_admin_note?: string }
+        Returns: undefined
+      }
+      reject_request_log: {
+        Args: { p_request_id: string; p_admin_id: string; p_admin_note?: string }
+        Returns: undefined
+      }
       current_user_role: { Args: never; Returns: string }
       detect_unauthorized_absences: { Args: never; Returns: undefined }
       is_admin: { Args: never; Returns: boolean }

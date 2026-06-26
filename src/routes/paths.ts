@@ -9,6 +9,7 @@ export const STUDENT_PATHS = {
   outing: '/outing',
   powerNap: '/power-nap',
   penalty: '/penalty',
+  mypage: '/mypage',
 } as const;
 
 export const ADMIN_PATHS = {
@@ -21,4 +22,5 @@ export const ADMIN_PATHS = {
   penalties: '/admin/penalties',
   warnings: '/admin/warnings',
   notifications: '/admin/notifications',
+  requests: '/admin/requests',
 } as const;
