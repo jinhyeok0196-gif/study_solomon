@@ -11,7 +11,6 @@ import {
 } from '@/features/chat/hooks';
 import { useChatRealtime } from '@/features/chat/useChatRealtime';
 import { useChatPresence } from '@/features/chat/usePresence';
-import { useChatTyping } from '@/features/chat/useTyping';
 import { ChatBubble } from '@/features/chat/components/ChatBubble';
 import { ChatDateDivider } from '@/features/chat/components/ChatDateDivider';
 import { ChatInput } from '@/features/chat/components/ChatInput';
@@ -47,16 +46,10 @@ export default function ChatPage() {
     },
   });
 
-  const { onlineUsers, connectionStatus } = useChatPresence(studentId, 'student', studentName);
+  const { onlineUsers, connectionStatus, sendTyping, stopTyping, getTypingUsersInRoom } =
+    useChatPresence(studentId, 'student', studentName);
   const isAdminOnline = onlineUsers.some((u) => u.role === 'admin');
-
-  const { typingUsers, sendTyping, sendStopTyping } = useChatTyping(
-    roomId,
-    studentId,
-    studentName,
-    'student'
-  );
-  const adminTypingNames = typingUsers.filter((u) => u.role === 'admin').map((u) => u.name);
+  const adminTypingNames = getTypingUsersInRoom(roomId).map((u) => u.name);
 
   useEffect(() => {
     requestNotificationPermission();
@@ -79,13 +72,13 @@ export default function ChatPage() {
 
   const handleSend = (content: string) => {
     if (!roomId) return;
-    sendStopTyping();
+    void stopTyping();
     sendMutation.mutate({ senderId: studentId, senderRole: 'student', content });
   };
 
   const handleTypingChange = (isTyping: boolean) => {
-    if (isTyping) sendTyping();
-    else sendStopTyping();
+    if (isTyping && roomId) void sendTyping(roomId);
+    else void stopTyping();
   };
 
   const handleRetry = (msg: ChatMessageLocal) => {
