@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { isSameMonth } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -8,9 +9,12 @@ import { useAttendanceRecordsQuery } from '@/features/attendance/hooks';
 import { computeAttendanceStats } from '@/features/attendance/stats';
 import { usePenaltyProfileQuery } from '@/features/penalty/hooks';
 import { computeRiskLevel } from '@/features/penalty/risk';
+import { useWeeklyScheduleQuery } from '@/features/schedule/hooks';
+import { getWeekStartDate, todayDayOfWeekKey } from '@/features/schedule/dates';
 import { STUDENT_PATHS } from '@/routes/paths';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { CurrentPeriodCard } from '@/components/schedule/CurrentPeriodCard';
 import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
 import { StudentStatusBadge } from '@/components/schedule/StudentStatusBadge';
@@ -27,11 +31,31 @@ export default function DashboardPage() {
   const studentId = user!.id;
   const now = useCurrentTime(1000);
 
+  const weekStartDate = getWeekStartDate(0);
   const { data: periods } = usePeriods();
   const { data: attendanceRecords } = useAttendanceRecordsQuery(studentId);
   const { data: penaltyProfile } = usePenaltyProfileQuery(studentId);
+  const { data: weekSchedule } = useWeeklyScheduleQuery(studentId, weekStartDate);
 
   const scheduleStatus = useScheduleStatus(periods, now);
+
+  // 오늘 일정은 본인이 신청한 교시만 표시한다 (전체 운영 교시 X).
+  const todayPeriodNumbers = useMemo(() => {
+    const todayKey = todayDayOfWeekKey();
+    return new Set<number>(
+      (weekSchedule?.cells ?? [])
+        .filter((cell) => cell.dayOfWeek === todayKey)
+        .map((cell) => cell.periodNumber)
+    );
+  }, [weekSchedule]);
+
+  const todayTimeline = useMemo(
+    () =>
+      scheduleStatus.timeline.filter(
+        (slot) => slot.periodNumber != null && todayPeriodNumbers.has(slot.periodNumber)
+      ),
+    [scheduleStatus.timeline, todayPeriodNumbers]
+  );
 
   const allRecords = attendanceRecords ?? [];
   const monthRecords = allRecords.filter((record) =>
@@ -82,10 +106,17 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* 오늘 일정 타임라인 */}
+      {/* 오늘 일정 타임라인 (본인이 신청한 교시만) */}
       <div>
         <p className="mb-3 text-sm font-semibold text-gray-700">오늘 일정</p>
-        <ScheduleTimeline timeline={scheduleStatus.timeline} />
+        {todayTimeline.length === 0 ? (
+          <EmptyState
+            title="오늘 신청한 교시가 없습니다"
+            description="시간표에서 오늘 공부할 교시를 신청해보세요."
+          />
+        ) : (
+          <ScheduleTimeline timeline={todayTimeline} />
+        )}
       </div>
     </div>
   );
