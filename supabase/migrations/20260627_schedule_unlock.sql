@@ -51,7 +51,7 @@ BEGIN
       UPDATE weekly_schedules
       SET status = 'draft', updated_at = now()
       WHERE student_id = v_req.student_id
-        AND week_start_date = v_req.new_value;
+        AND week_start_date = v_req.new_value::date;
     ELSE NULL;
   END CASE;
 
