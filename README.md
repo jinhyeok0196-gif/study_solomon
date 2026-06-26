@@ -1,70 +1,117 @@
-# GitHub Codespaces ♥️ React
+# 솔로몬스터디카페 관리 시스템
 
-Welcome to your shiny new Codespace running React! We've got everything fired up and running for you to explore React.
+스터디카페 운영에 필요한 학생·관리자 기능을 하나의 웹앱으로 통합한 SPA입니다.
 
-You've got a blank canvas to work on from a git perspective as well. There's a single initial commit with the what you're seeing right now - where you go from here is up to you!
+## 기술 스택
 
-Everything you do here is contained within this one codespace. There is no repository on GitHub yet. If and when you’re ready you can click "Publish Branch" and we’ll create your repository and push up your project. If you were just exploring then and have no further need for this code then you can simply delete your codespace and it's gone forever.
+| 분류 | 기술 |
+|---|---|
+| 프레임워크 | React 18 + TypeScript |
+| 빌드 | Vite 8 |
+| 라우팅 | React Router v7 |
+| 서버 상태 | TanStack Query v5 |
+| 백엔드 | Supabase (PostgreSQL + Auth + Storage + Realtime) |
+| 스타일 | Tailwind CSS v3 |
+| 폼 | React Hook Form + Zod |
+| 배포 | Cloudflare Pages |
+| 테스트 | Vitest |
 
-This project was bootstrapped for you with [Vite](https://vitejs.dev/).
+## 주요 기능
 
-## Available Scripts
+**학생 포털**
+- 대시보드: 현재 교시 현황, 출석 통계, 벌점 리스크
+- 주간 시간표 제출 및 이력 조회
+- 출석 기록 조회
+- 결석·조퇴 신청 및 승인 현황
+- 외출 시작/복귀 기록
+- 파워냅(낮잠) 타이머 (1일 1회, 최대 40분)
+- 벌점·경고 내역 조회
+- 1:1 채팅 (관리자 문의)
+- 마이페이지
 
-In the project directory, you can run:
+**관리자 포털**
+- 대시보드: 실시간 현황 (착석·외출·파워냅·결석·지각 인원)
+- 학생 관리 (등록·수정·상세 조회)
+- 주간 시간표 확인 및 수정
+- 출결 관리 (수동 처리 포함)
+- 벌점 부여·차감 및 경고 관리
+- 결석·조퇴 신청 승인/반려
+- 실시간 알림 수신 (외출·파워냅·무단결석 등)
+- 1:1 채팅 (학생 전체 목록 + 학생 상태 패널)
 
-### `npm start`
+## 로컬 개발 환경 설정
 
-We've already run this for you in the `Codespaces: server` terminal window below. If you need to stop the server for any reason you can just run `npm start` again to bring it back online.
+```bash
+# 의존성 설치
+npm install
 
-Runs the app in the development mode.\
-Open [http://localhost:3000/](http://localhost:3000/) in the built-in Simple Browser (`Cmd/Ctrl + Shift + P > Simple Browser: Show`) to view your running application.
+# 환경 변수 설정 (.env.local 파일 생성)
+# VITE_SUPABASE_URL=https://your-project.supabase.co
+# VITE_SUPABASE_ANON_KEY=your-anon-key
 
-The page will reload automatically when you make changes.\
-You may also see any lint errors in the console.
+# 개발 서버 실행 (http://localhost:3000)
+npm run dev
 
-### `npm test`
+# 타입 체크
+npm run type-check
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+# 테스트 실행
+npm test
 
-### `npm run build`
+# 프로덕션 빌드
+npm run build
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## 환경 변수
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+| 변수명 | 설명 |
+|---|---|
+| `VITE_SUPABASE_URL` | Supabase 프로젝트 URL |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon public key |
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+Cloudflare Pages 배포 시 대시보드 → Settings → Environment variables에 동일하게 등록합니다.
 
-## Learn More
+## 프로젝트 구조
 
-You can learn more in the [Vite documentation](https://vitejs.dev/guide/).
+```
+src/
+├── components/       # 재사용 UI 컴포넌트 (layout, ui, schedule, shared)
+├── context/          # React Context (AuthContext)
+├── features/         # 도메인별 API + hooks + 로컬 컴포넌트
+├── hooks/            # 전역 커스텀 훅
+├── lib/              # Supabase 클라이언트, QueryClient, 유틸
+├── pages/            # 라우트별 페이지 컴포넌트
+│   ├── admin/
+│   └── student/
+├── routes/           # AppRouter, paths 상수
+├── types/            # 전역 도메인 타입
+└── constants/        # 교시 정의, 벌점 규칙 등
+```
 
-To learn Vitest, a Vite-native testing framework, go to [Vitest documentation](https://vitest.dev/guide/)
+## 배포
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+`main` 브랜치 푸시 시 Cloudflare Pages에 자동 배포됩니다.
 
-### Code Splitting
+- 빌드 명령: `npm run build`
+- 출력 디렉토리: `dist`
 
-This section has moved here: [https://sambitsahoo.com/blog/vite-code-splitting-that-works.html](https://sambitsahoo.com/blog/vite-code-splitting-that-works.html)
+## 데이터베이스 마이그레이션
 
-### Analyzing the Bundle Size
+마이그레이션 파일은 `supabase/migrations/`에 날짜순으로 관리합니다.
+Supabase 대시보드 SQL 에디터에서 순서대로 실행합니다.
 
-This section has moved here: [https://github.com/btd/rollup-plugin-visualizer#rollup-plugin-visualizer](https://github.com/btd/rollup-plugin-visualizer#rollup-plugin-visualizer)
+```bash
+# 로컬 Supabase CLI 사용 시
+npm run db:start    # 로컬 Supabase 시작
+npm run db:reset    # 마이그레이션 재적용
+npm run db:types    # TypeScript 타입 재생성
+```
 
-### Making a Progressive Web App
-
-This section has moved here: [https://dev.to/hamdankhan364/simplifying-progressive-web-app-pwa-development-with-vite-a-beginners-guide-38cf](https://dev.to/hamdankhan364/simplifying-progressive-web-app-pwa-development-with-vite-a-beginners-guide-38cf)
-
-### Advanced Configuration
-
-This section has moved here: [https://vitejs.dev/guide/build.html#advanced-base-options](https://vitejs.dev/guide/build.html#advanced-base-options)
-
-### Deployment
-
-This section has moved here: [https://vitejs.dev/guide/build.html](https://vitejs.dev/guide/build.html)
-
-### Troubleshooting
-
-This section has moved here: [https://vitejs.dev/guide/troubleshooting.html](https://vitejs.dev/guide/troubleshooting.html)
+자세한 내용은 각 문서를 참조하세요:
+- [ARCHITECTURE.md](ARCHITECTURE.md) — 전체 아키텍처
+- [DATABASE.md](DATABASE.md) — DB 스키마 및 RLS
+- [API.md](API.md) — 기능별 API 목록
+- [COMPONENT_STRUCTURE.md](COMPONENT_STRUCTURE.md) — 컴포넌트 구조
+- [PRD.md](PRD.md) — 제품 요구사항
+- [PROJECT_RULES.md](PROJECT_RULES.md) — 프로젝트 규칙
+- [DEVELOPMENT_RULES.md](DEVELOPMENT_RULES.md) — 개발 규칙
