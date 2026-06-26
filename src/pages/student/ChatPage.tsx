@@ -3,14 +3,22 @@ import { useAuth } from '@/hooks/useAuth';
 import {
   useChatRoomQuery,
   useChatMessagesQuery,
-  useChatRealtimeSubscription,
+  useChatReadsQuery,
   useSendMessageMutation,
   useMarkReadMutation,
+  requestNotificationPermission,
+  showBrowserNotification,
 } from '@/features/chat/hooks';
+import { useChatRealtime } from '@/features/chat/useChatRealtime';
+import { useChatPresence } from '@/features/chat/usePresence';
+import { useChatTyping } from '@/features/chat/useTyping';
 import { ChatBubble } from '@/features/chat/components/ChatBubble';
 import { ChatDateDivider } from '@/features/chat/components/ChatDateDivider';
 import { ChatInput } from '@/features/chat/components/ChatInput';
+import { TypingIndicator } from '@/features/chat/components/TypingIndicator';
+import { OnlineStatusBadge } from '@/features/chat/components/OnlineStatusBadge';
 import { Spinner } from '@/components/ui/Spinner';
+import type { ChatMessageLocal } from '@/features/chat/types';
 
 function isSameDay(a: string, b: string) {
   return a.slice(0, 10) === b.slice(0, 10);
@@ -19,16 +27,41 @@ function isSameDay(a: string, b: string) {
 export default function ChatPage() {
   const { user } = useAuth();
   const studentId = user!.id;
+  const studentName = user!.name;
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { data: roomId } = useChatRoomQuery(studentId);
   const { data: messages, isLoading } = useChatMessagesQuery(roomId);
+  const { data: readSet } = useChatReadsQuery(roomId);
   const sendMutation = useSendMessageMutation(roomId);
   const markReadMutation = useMarkReadMutation(roomId);
 
-  useChatRealtimeSubscription(roomId);
+  useChatRealtime({
+    roomId,
+    currentUserId: studentId,
+    currentRole: 'student',
+    onNewMessage: (msg) => {
+      if (msg.sender_role === 'admin') {
+        showBrowserNotification('관리자 메시지', msg.content);
+      }
+    },
+  });
 
-  // 방 열면 admin 메시지 읽음 처리
+  const { onlineUsers, connectionStatus } = useChatPresence(studentId, 'student', studentName);
+  const isAdminOnline = onlineUsers.some((u) => u.role === 'admin');
+
+  const { typingUsers, sendTyping, sendStopTyping } = useChatTyping(
+    roomId,
+    studentId,
+    studentName,
+    'student'
+  );
+  const adminTypingNames = typingUsers.filter((u) => u.role === 'admin').map((u) => u.name);
+
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
+
   useEffect(() => {
     if (roomId) {
       markReadMutation.mutate({ readerId: studentId, senderRole: 'student' });
@@ -38,23 +71,48 @@ export default function ChatPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (roomId && messages?.length) {
+      markReadMutation.mutate({ readerId: studentId, senderRole: 'student' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages?.length]);
 
   const handleSend = (content: string) => {
     if (!roomId) return;
+    sendStopTyping();
     sendMutation.mutate({ senderId: studentId, senderRole: 'student', content });
+  };
+
+  const handleTypingChange = (isTyping: boolean) => {
+    if (isTyping) sendTyping();
+    else sendStopTyping();
+  };
+
+  const handleRetry = (msg: ChatMessageLocal) => {
+    if (!roomId) return;
+    sendMutation.mutate({ senderId: studentId, senderRole: 'student', content: msg.content });
   };
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
       <div className="flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-3">
-        <div className="h-9 w-9 rounded-full bg-brand-100 flex items-center justify-center text-sm font-bold text-brand-700">
-          관
+        <div className="relative">
+          <div className="h-9 w-9 rounded-full bg-brand-100 flex items-center justify-center text-sm font-bold text-brand-700">
+            관
+          </div>
+          <div className="absolute -bottom-0.5 -right-0.5">
+            <OnlineStatusBadge isOnline={isAdminOnline} size="sm" />
+          </div>
         </div>
-        <div>
+        <div className="flex-1">
           <p className="text-sm font-semibold text-gray-900">관리자</p>
-          <p className="text-xs text-gray-400">솔로몬스터디카페</p>
+          <OnlineStatusBadge isOnline={isAdminOnline} showLabel />
         </div>
+        {connectionStatus !== 'connected' && (
+          <span className="text-xs text-orange-500 animate-pulse">
+            {connectionStatus === 'connecting' ? '연결 중...' : '연결 끊김'}
+          </span>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto bg-gray-50 py-2">
@@ -69,23 +127,35 @@ export default function ChatPage() {
           </div>
         ) : (
           <>
-            {messages.map((msg, idx) => {
+            {(messages as ChatMessageLocal[]).map((msg, idx) => {
               const prevMsg = messages[idx - 1];
               const showDateDivider = !prevMsg || !isSameDay(prevMsg.created_at, msg.created_at);
               const isOwn = msg.sender_id === studentId;
+              const isRead = isOwn ? (readSet?.has(msg.id) ?? false) : false;
               return (
                 <div key={msg.id}>
                   {showDateDivider && <ChatDateDivider date={msg.created_at} />}
-                  <ChatBubble message={msg} isOwn={isOwn} />
+                  <ChatBubble
+                    message={msg}
+                    isOwn={isOwn}
+                    isRead={isRead}
+                    onRetry={msg._isFailed ? () => handleRetry(msg) : undefined}
+                  />
                 </div>
               );
             })}
+            <TypingIndicator names={adminTypingNames} className="px-3 py-1" />
             <div ref={bottomRef} />
           </>
         )}
       </div>
 
-      <ChatInput onSend={handleSend} isSending={sendMutation.isPending} />
+      <ChatInput
+        onSend={handleSend}
+        isSending={sendMutation.isPending}
+        onTypingChange={handleTypingChange}
+        roomId={roomId}
+      />
     </div>
   );
 }

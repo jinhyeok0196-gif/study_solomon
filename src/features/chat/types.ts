@@ -35,3 +35,9 @@ export interface QuickReply {
   content: string;
   sort_order: number;
 }
+
+// Local-only extension for optimistic/failed states
+export interface ChatMessageLocal extends ChatMessage {
+  _isPending?: boolean;
+  _isFailed?: boolean;
+}
