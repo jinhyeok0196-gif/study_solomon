@@ -11,14 +11,19 @@ export default function PenaltyPage() {
   const { user } = useAuth();
   const studentId = user!.id;
 
-  const { data: profile, isLoading: isProfileLoading } = usePenaltyProfileQuery(studentId);
+  const { data: profile, isLoading: isProfileLoading, isError } = usePenaltyProfileQuery(studentId);
   const { data: penaltyRecords } = usePenaltyRecordsQuery(studentId);
   const { data: warningRecords } = useWarningRecordsQuery(studentId);
 
-  if (isProfileLoading || !profile) {
+  if (isProfileLoading) {
+    return <div className="flex justify-center py-12"><Spinner /></div>;
+  }
+
+  if (isError || !profile) {
     return (
-      <div className="flex justify-center py-12">
-        <Spinner />
+      <div className="flex flex-col items-center justify-center gap-2 p-8 text-center">
+        <p className="text-sm font-medium text-gray-700">벌점 정보를 불러올 수 없습니다.</p>
+        <p className="text-xs text-gray-400">관리자에게 문의해주세요.</p>
       </div>
     );
   }

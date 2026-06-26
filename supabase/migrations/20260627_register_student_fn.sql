@@ -21,15 +21,14 @@ BEGIN
     RAISE EXCEPTION 'not authenticated';
   END IF;
 
-  -- 이미 등록된 경우 무시 (멱등성)
-  IF EXISTS (SELECT 1 FROM public.users WHERE id = v_uid) THEN
-    RETURN;
-  END IF;
-
+  -- users 행이 없으면 생성
   INSERT INTO public.users (id, name, phone, role)
-  VALUES (v_uid, p_name, p_phone, 'student');
+  VALUES (v_uid, p_name, p_phone, 'student')
+  ON CONFLICT (id) DO NOTHING;
 
+  -- student_profiles 행이 없으면 생성 (users와 별개로 확인)
   INSERT INTO public.student_profiles (id)
-  VALUES (v_uid);
+  VALUES (v_uid)
+  ON CONFLICT (id) DO NOTHING;
 END;
 $$;
