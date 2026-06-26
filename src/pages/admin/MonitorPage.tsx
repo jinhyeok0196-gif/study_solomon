@@ -1,5 +1,10 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useSeatLayoutsQuery, useMonitorStudentsQuery, useEventLogQuery } from '@/features/admin-monitor/hooks';
+import {
+  useSeatLayoutsQuery,
+  useMonitorStudentsQuery,
+  useEventLogQuery,
+  useSeatAssignMutations,
+} from '@/features/admin-monitor/hooks';
 import { useMonitorRealtime } from '@/features/admin-monitor/useMonitorRealtime';
 import { useDashboardSummaryQuery } from '@/features/admin-dashboard/hooks';
 import { useChatRoomQuery } from '@/features/chat/hooks';
@@ -11,6 +16,7 @@ import { StudentStatusPanel } from '@/features/chat/components/StudentStatusPane
 import { SeatGrid } from '@/features/admin-monitor/components/SeatGrid';
 import { EventLog } from '@/features/admin-monitor/components/EventLog';
 import { MiniChat } from '@/features/admin-monitor/components/MiniChat';
+import { SeatAssignModal } from '@/features/admin-monitor/components/SeatAssignModal';
 import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/utils';
 import type { SeatData } from '@/features/admin-monitor/types';
@@ -35,6 +41,32 @@ function StudentRoomBridge({ studentId }: { studentId: string }) {
   );
 }
 
+interface SeatActionBarProps {
+  seatLabel: string | null;
+  studentName: string;
+  onUnassign: () => void;
+  isUnassigning: boolean;
+}
+
+function SeatActionBar({ seatLabel, studentName, onUnassign, isUnassigning }: SeatActionBarProps) {
+  return (
+    <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-3 py-1.5">
+      <span className="text-xs text-gray-500">
+        <span className="font-semibold text-gray-700">{studentName}</span>
+        {seatLabel && <span className="ml-1 text-gray-400">· {seatLabel}석</span>}
+      </span>
+      <button
+        type="button"
+        onClick={onUnassign}
+        disabled={isUnassigning}
+        className="rounded-md px-2 py-0.5 text-[11px] font-medium text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50"
+      >
+        좌석 해제
+      </button>
+    </div>
+  );
+}
+
 export default function MonitorPage() {
   const now = useCurrentTime(1000);
   const { data: periods } = usePeriods();
@@ -48,10 +80,8 @@ export default function MonitorPage() {
   useMonitorRealtime();
 
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-
-  const handleSeatClick = useCallback((studentId: string | null) => {
-    setSelectedStudentId((prev) => (prev === studentId ? null : studentId));
-  }, []);
+  const [assignSeat, setAssignSeat] = useState<{ seatNumber: number; label: string } | null>(null);
+  const { unassign } = useSeatAssignMutations();
 
   const seatDataList: SeatData[] = useMemo(() => {
     if (!seatLayouts) return [];
@@ -62,6 +92,24 @@ export default function MonitorPage() {
       return { seat, student, status };
     });
   }, [seatLayouts, monitorStudents]);
+
+  const handleSeatClick = useCallback(
+    (studentId: string | null, seatNumber: number) => {
+      if (studentId === null) {
+        // 빈 좌석 → 학생 배정 모달
+        const seat = seatLayouts?.find((s) => s.seatNumber === seatNumber);
+        setAssignSeat({ seatNumber, label: seat?.displayName ?? `${seatNumber}번` });
+        return;
+      }
+      setSelectedStudentId((prev) => (prev === studentId ? null : studentId));
+    },
+    [seatLayouts]
+  );
+
+  const selectedSeat = useMemo(
+    () => seatDataList.find((sd) => sd.student?.id === selectedStudentId) ?? null,
+    [seatDataList, selectedStudentId]
+  );
 
   const currentSlotLabel = scheduleStatus.currentSlot?.label ?? null;
   const remainingSeconds = scheduleStatus.remainingSeconds;
@@ -138,9 +186,9 @@ export default function MonitorPage() {
             <div className="flex h-40 flex-col items-center justify-center gap-2 text-center">
               <p className="text-sm text-gray-500">좌석 배치 정보가 없습니다</p>
               <p className="text-xs text-gray-400">
-                Supabase에서 seat_layouts 테이블에 좌석을 추가하고,
+                seat_layouts 마이그레이션(20260702)이 적용되면
                 <br />
-                student_profiles.seat_number에 학생을 배정해주세요.
+                좌석이 표시되고, 빈 좌석을 클릭해 학생을 배정할 수 있습니다.
               </p>
             </div>
           ) : (
@@ -161,6 +209,15 @@ export default function MonitorPage() {
             <>
               {/* 선택된 학생 패널 */}
               <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white min-h-0">
+                <SeatActionBar
+                  seatLabel={selectedSeat?.seat.displayName ?? null}
+                  studentName={selectedSeat?.student?.studentName ?? ''}
+                  isUnassigning={unassign.isPending}
+                  onUnassign={() => {
+                    unassign.mutate(selectedStudentId);
+                    setSelectedStudentId(null);
+                  }}
+                />
                 {/* 학생 상태 패널 (스크롤 가능) */}
                 <div className="flex-1 overflow-y-auto min-h-0">
                   <StudentRoomBridge studentId={selectedStudentId} />
@@ -204,6 +261,15 @@ export default function MonitorPage() {
                 ✕
               </button>
             </div>
+            <SeatActionBar
+              seatLabel={selectedSeat?.seat.displayName ?? null}
+              studentName={selectedSeat?.student?.studentName ?? ''}
+              isUnassigning={unassign.isPending}
+              onUnassign={() => {
+                unassign.mutate(selectedStudentId);
+                setSelectedStudentId(null);
+              }}
+            />
             <div className="flex-1 overflow-y-auto min-h-0">
               <StudentRoomBridge studentId={selectedStudentId} />
             </div>
@@ -211,6 +277,14 @@ export default function MonitorPage() {
           </div>
         </div>
       )}
+
+      {/* 좌석 배정 모달 */}
+      <SeatAssignModal
+        open={assignSeat !== null}
+        seatNumber={assignSeat?.seatNumber ?? null}
+        seatLabel={assignSeat?.label ?? ''}
+        onClose={() => setAssignSeat(null)}
+      />
     </div>
   );
 }

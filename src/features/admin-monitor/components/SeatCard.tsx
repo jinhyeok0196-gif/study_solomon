@@ -19,25 +19,23 @@ function SeatCardInner({ seatData, isSelected, onClick, now, currentSlotLabel, r
   const isEmpty = status === 'empty';
 
   const handleClick = () => {
-    if (!isEmpty) {
-      onClick(student?.id ?? null, seat.seatNumber);
-    }
+    onClick(student?.id ?? null, seat.seatNumber);
   };
 
   const remainingMin = Math.floor(remainingSeconds / 60);
 
   return (
     <div
-      role={isEmpty ? undefined : 'button'}
-      tabIndex={isEmpty ? undefined : 0}
-      onKeyDown={isEmpty ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') handleClick(); }}
-      onClick={isEmpty ? undefined : handleClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClick(); }}
+      onClick={handleClick}
       className={cn(
         'relative flex flex-col rounded-xl border-2 p-3 transition-all duration-200',
         cfg.cardClass,
         isSelected && 'ring-2 ring-brand-500 ring-offset-1',
-        !isEmpty && 'cursor-pointer hover:shadow-md hover:scale-[1.02] active:scale-[0.98]',
-        isEmpty && 'cursor-default opacity-70'
+        'cursor-pointer hover:shadow-md hover:scale-[1.02] active:scale-[0.98]',
+        isEmpty && 'opacity-70 hover:opacity-100'
       )}
     >
       {/* 좌석 번호 */}
@@ -53,7 +51,7 @@ function SeatCardInner({ seatData, isSelected, onClick, now, currentSlotLabel, r
             {student.studentName}
           </p>
         ) : (
-          <p className="text-xs text-gray-300 text-center">빈 좌석</p>
+          <p className="text-xs text-gray-300 text-center">+ 배정</p>
         )}
       </div>
 

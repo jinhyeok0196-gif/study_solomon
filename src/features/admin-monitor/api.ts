@@ -151,6 +151,60 @@ export async function fetchMonitorStudents(): Promise<MonitorStudentRow[]> {
     });
 }
 
+// ── 좌석 배정 ────────────────────────────────────────────────────────────
+
+export interface AssignableStudent {
+  id: string;
+  name: string;
+  seatNumber: number | null;
+}
+
+interface AssignableStudentRow {
+  id: string;
+  seat_number: number | null;
+  membership_status: string;
+  users: { name: string } | null;
+}
+
+export async function fetchAssignableStudents(): Promise<AssignableStudent[]> {
+  const { data, error } = await supabase
+    .from('student_profiles')
+    .select('id, seat_number, membership_status, users(name)')
+    .eq('membership_status', 'active');
+  if (error) throw error;
+  return (data as unknown as AssignableStudentRow[])
+    .map((s) => ({
+      id: s.id,
+      name: s.users?.name ?? '(알 수 없음)',
+      seatNumber: s.seat_number,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+}
+
+export async function assignSeat(studentId: string, seatNumber: number): Promise<void> {
+  // 같은 좌석을 쓰던 다른 학생이 있으면 먼저 비운다 (좌석은 1인 1석)
+  const { error: clearError } = await supabase
+    .from('student_profiles')
+    .update({ seat_number: null })
+    .eq('seat_number', seatNumber)
+    .neq('id', studentId);
+  if (clearError) throw clearError;
+
+  const { error } = await supabase
+    .from('student_profiles')
+    .update({ seat_number: seatNumber })
+    .eq('id', studentId);
+  if (error) throw error;
+}
+
+export async function unassignSeat(studentId: string): Promise<void> {
+  const { error } = await supabase
+    .from('student_profiles')
+    .update({ seat_number: null })
+    .eq('id', studentId);
+  if (error) throw error;
+}
+
 // ── 이벤트 로그 ──────────────────────────────────────────────────────────
 
 interface OutingEventRow {
