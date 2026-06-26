@@ -32,6 +32,7 @@ import WarningsPage from '@/pages/admin/WarningsPage';
 import NotificationsPage from '@/pages/admin/NotificationsPage';
 import RequestsPage from '@/pages/admin/RequestsPage';
 import AdminChatPage from '@/pages/admin/ChatPage';
+import AdminMonitorPage from '@/pages/admin/MonitorPage';
 
 export function AppRouter() {
   return (
@@ -83,6 +84,7 @@ export function AppRouter() {
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="requests" element={<RequestsPage />} />
         <Route path="chat" element={<AdminChatPage />} />
+        <Route path="monitor" element={<AdminMonitorPage />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />

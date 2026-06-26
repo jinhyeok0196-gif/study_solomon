@@ -25,4 +25,5 @@ export const ADMIN_PATHS = {
   notifications: '/admin/notifications',
   requests: '/admin/requests',
   chat: '/admin/chat',
+  monitor: '/admin/monitor',
 } as const;
