@@ -3,6 +3,46 @@ import type { Json, Tables, TablesInsert } from '@/lib/supabase/database.types';
 import type { DayOfWeek, PeriodNumber } from '@/constants/periods';
 import type { ScheduleCell } from './types';
 
+export async function requestScheduleUnlock(
+  studentId: string,
+  weekStartDate: string,
+  reason: string
+): Promise<void> {
+  const { error } = await supabase.from('request_logs').insert({
+    student_id: studentId,
+    request_type: 'schedule_unlock',
+    reason,
+    new_value: weekStartDate,
+  });
+  if (error) throw error;
+
+  await supabase.from('notifications').insert({
+    recipient_id: null,
+    recipient_role: 'admin',
+    related_student_id: studentId,
+    type: 'schedule_unlock_request',
+    title: '시간표 수정 권한 요청',
+    message: `시간표 수정 권한 요청이 접수되었습니다. (대상 주: ${weekStartDate})`,
+  });
+}
+
+export async function fetchPendingScheduleUnlockRequest(
+  studentId: string,
+  weekStartDate: string
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('request_logs')
+    .select('id')
+    .eq('student_id', studentId)
+    .eq('request_type', 'schedule_unlock')
+    .eq('new_value', weekStartDate)
+    .eq('status', 'pending')
+    .maybeSingle();
+
+  if (error) throw error;
+  return data !== null;
+}
+
 export interface WeeklyScheduleWithItems {
   schedule: Tables<'weekly_schedules'> | null;
   cells: ScheduleCell[];
