@@ -22,6 +22,19 @@ export async function signOutCurrentUser() {
   }
 }
 
+export async function signInWithGoogle() {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    },
+  });
+
+  if (error) {
+    throw new Error('구글 로그인에 실패했습니다.');
+  }
+}
+
 export async function fetchUserProfile(userId: string): Promise<AuthenticatedUser | null> {
   const { data, error } = await supabase
     .from('users')

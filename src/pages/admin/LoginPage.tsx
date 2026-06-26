@@ -1,6 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { PhoneLoginForm } from '@/features/auth/components/PhoneLoginForm';
+import { GoogleLoginButton } from '@/features/auth/components/GoogleLoginButton';
 import { STUDENT_PATHS, ADMIN_PATHS } from '@/routes/paths';
 
 export default function LoginPage() {
@@ -21,6 +22,14 @@ export default function LoginPage() {
         wrongRoleMessage="학생 계정입니다. 학생 로그인 페이지를 이용해주세요."
         redirectTo={ADMIN_PATHS.dashboard}
       />
+      <div className="flex w-full max-w-sm items-center gap-3">
+        <hr className="flex-1 border-gray-300" />
+        <span className="text-xs text-gray-400">또는</span>
+        <hr className="flex-1 border-gray-300" />
+      </div>
+      <div className="w-full max-w-sm">
+        <GoogleLoginButton />
+      </div>
     </div>
   );
 }

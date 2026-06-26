@@ -17,6 +17,7 @@ import OutingPage from '@/pages/student/OutingPage';
 import PowerNapPage from '@/pages/student/PowerNapPage';
 import PenaltyPage from '@/pages/student/PenaltyPage';
 
+import AuthCallbackPage from '@/pages/auth/CallbackPage';
 import AdminLoginPage from '@/pages/admin/LoginPage';
 import AdminDashboardPage from '@/pages/admin/DashboardPage';
 import StudentsPage from '@/pages/admin/StudentsPage';
@@ -32,6 +33,7 @@ export function AppRouter() {
     <Routes>
       <Route path="/login" element={<StudentLoginPage />} />
       <Route path="/admin/login" element={<AdminLoginPage />} />
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
       <Route
         element={
