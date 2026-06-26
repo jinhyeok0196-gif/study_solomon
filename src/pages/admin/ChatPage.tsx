@@ -10,6 +10,7 @@ import {
 import { ChatBubble } from '@/features/chat/components/ChatBubble';
 import { ChatDateDivider } from '@/features/chat/components/ChatDateDivider';
 import { ChatInput } from '@/features/chat/components/ChatInput';
+import { StudentStatusPanel } from '@/features/chat/components/StudentStatusPanel';
 import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/utils';
 import type { ChatRoomWithMeta } from '@/features/chat/types';
@@ -78,6 +79,7 @@ export default function AdminChatPage() {
   const { user } = useAuth();
   const adminId = user!.id;
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [selectedStudentName, setSelectedStudentName] = useState<string>('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -102,6 +104,7 @@ export default function AdminChatPage() {
 
   const handleSelectRoom = (room: ChatRoomWithMeta) => {
     setSelectedRoomId(room.room_id);
+    setSelectedStudentId(room.student_id);
     setSelectedStudentName(room.student_name);
   };
 
@@ -115,7 +118,7 @@ export default function AdminChatPage() {
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
       {/* 좌측: 학생 목록 */}
-      <div className="w-64 flex-shrink-0 flex flex-col border-r border-gray-200 bg-white">
+      <div className="w-56 flex-shrink-0 flex flex-col border-r border-gray-200 bg-white">
         <div className="px-4 py-3 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold text-gray-900">학생 문의</span>
@@ -193,6 +196,11 @@ export default function AdminChatPage() {
           </>
         )}
       </div>
+
+      {/* 우측: 학생 상태 패널 */}
+      {selectedStudentId && (
+        <StudentStatusPanel studentId={selectedStudentId} roomId={selectedRoomId} />
+      )}
     </div>
   );
 }

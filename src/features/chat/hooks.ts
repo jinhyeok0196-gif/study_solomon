@@ -62,11 +62,13 @@ export function useSendMessageMutation(roomId: string | undefined) {
       senderId,
       senderRole,
       content,
+      messageType,
     }: {
       senderId: string;
       senderRole: 'student' | 'admin';
       content: string;
-    }) => sendChatMessage(roomId!, senderId, senderRole, content),
+      messageType?: 'text' | 'system' | 'announcement';
+    }) => sendChatMessage(roomId!, senderId, senderRole, content, messageType),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-chat-rooms'] });
     },
