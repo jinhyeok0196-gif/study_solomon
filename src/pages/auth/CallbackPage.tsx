@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase/client';
-import { fetchUserProfile, signOutCurrentUser } from '@/features/auth/api';
+import { fetchUserProfile } from '@/features/auth/api';
 import { STUDENT_PATHS, ADMIN_PATHS } from '@/routes/paths';
 
 export default function CallbackPage() {
@@ -20,8 +20,7 @@ export default function CallbackPage() {
       const profile = await fetchUserProfile(data.session.user.id).catch(() => null);
 
       if (!profile) {
-        await signOutCurrentUser();
-        setError('등록되지 않은 계정입니다. 관리자에게 문의해주세요.');
+        navigate('/auth/register', { replace: true });
         return;
       }
 

@@ -18,6 +18,7 @@ import PowerNapPage from '@/pages/student/PowerNapPage';
 import PenaltyPage from '@/pages/student/PenaltyPage';
 
 import AuthCallbackPage from '@/pages/auth/CallbackPage';
+import AuthRegisterPage from '@/pages/auth/RegisterPage';
 import AdminLoginPage from '@/pages/admin/LoginPage';
 import AdminDashboardPage from '@/pages/admin/DashboardPage';
 import StudentsPage from '@/pages/admin/StudentsPage';
@@ -34,6 +35,7 @@ export function AppRouter() {
       <Route path="/login" element={<StudentLoginPage />} />
       <Route path="/admin/login" element={<AdminLoginPage />} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
+      <Route path="/auth/register" element={<AuthRegisterPage />} />
 
       <Route
         element={

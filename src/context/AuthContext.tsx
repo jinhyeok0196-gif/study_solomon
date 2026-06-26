@@ -6,6 +6,7 @@ import type { AuthenticatedUser } from '@/types/domain';
 interface AuthContextValue {
   user: AuthenticatedUser | null;
   isLoading: boolean;
+  setUser: (user: AuthenticatedUser) => void;
   login: (phone: string, password: string) => Promise<AuthenticatedUser>;
   logout: () => Promise<void>;
 }
@@ -47,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthContextValue = {
     user,
     isLoading,
+    setUser,
     login: async (phone, password) => {
       await signInWithPhone(phone, password);
       const { data } = await supabase.auth.getUser();

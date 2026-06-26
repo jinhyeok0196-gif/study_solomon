@@ -35,6 +35,22 @@ export async function signInWithGoogle() {
   }
 }
 
+export async function createStudentProfile(userId: string, name: string, phone: string): Promise<AuthenticatedUser> {
+  const { error: userError } = await supabase
+    .from('users')
+    .insert({ id: userId, name, phone, role: 'student' });
+
+  if (userError) throw userError;
+
+  const { error: profileError } = await supabase
+    .from('student_profiles')
+    .insert({ id: userId });
+
+  if (profileError) throw profileError;
+
+  return { id: userId, name, phone, role: 'student' };
+}
+
 export async function fetchUserProfile(userId: string): Promise<AuthenticatedUser | null> {
   const { data, error } = await supabase
     .from('users')
