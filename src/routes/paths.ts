@@ -10,6 +10,7 @@ export const STUDENT_PATHS = {
   powerNap: '/power-nap',
   penalty: '/penalty',
   mypage: '/mypage',
+  chat: '/chat',
 } as const;
 
 export const ADMIN_PATHS = {
@@ -23,4 +24,5 @@ export const ADMIN_PATHS = {
   warnings: '/admin/warnings',
   notifications: '/admin/notifications',
   requests: '/admin/requests',
+  chat: '/admin/chat',
 } as const;

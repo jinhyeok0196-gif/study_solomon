@@ -744,6 +744,99 @@ export type Database = {
           },
         ]
       }
+      chat_rooms: {
+        Row: {
+          id: string
+          student_id: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          student_id: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          student_id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      chat_messages: {
+        Row: {
+          id: string
+          room_id: string
+          sender_id: string | null
+          sender_role: string
+          content: string
+          message_type: string
+          metadata: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          room_id: string
+          sender_id?: string | null
+          sender_role: string
+          content: string
+          message_type?: string
+          metadata?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          room_id?: string
+          sender_id?: string | null
+          sender_role?: string
+          content?: string
+          message_type?: string
+          metadata?: Json | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      message_reads: {
+        Row: {
+          message_id: string
+          reader_id: string
+          read_at: string
+        }
+        Insert: {
+          message_id: string
+          reader_id: string
+          read_at?: string
+        }
+        Update: {
+          message_id?: string
+          reader_id?: string
+          read_at?: string
+        }
+        Relationships: []
+      }
+      quick_replies: {
+        Row: {
+          id: string
+          content: string
+          sort_order: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          content: string
+          sort_order?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          content?: string
+          sort_order?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
       weekly_schedules: {
         Row: {
           created_at: string
@@ -802,6 +895,10 @@ export type Database = {
       current_user_role: { Args: never; Returns: string }
       detect_unauthorized_absences: { Args: never; Returns: undefined }
       is_admin: { Args: never; Returns: boolean }
+      get_or_create_chat_room: {
+        Args: { p_student_id: string }
+        Returns: string
+      }
       notify_admins: {
         Args: {
           p_message: string

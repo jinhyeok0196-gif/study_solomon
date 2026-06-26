@@ -17,6 +17,7 @@ import OutingPage from '@/pages/student/OutingPage';
 import PowerNapPage from '@/pages/student/PowerNapPage';
 import PenaltyPage from '@/pages/student/PenaltyPage';
 import MyPage from '@/pages/student/MyPage';
+import StudentChatPage from '@/pages/student/ChatPage';
 
 import AuthCallbackPage from '@/pages/auth/CallbackPage';
 import AuthRegisterPage from '@/pages/auth/RegisterPage';
@@ -30,6 +31,7 @@ import PenaltiesPage from '@/pages/admin/PenaltiesPage';
 import WarningsPage from '@/pages/admin/WarningsPage';
 import NotificationsPage from '@/pages/admin/NotificationsPage';
 import RequestsPage from '@/pages/admin/RequestsPage';
+import AdminChatPage from '@/pages/admin/ChatPage';
 
 export function AppRouter() {
   return (
@@ -58,6 +60,7 @@ export function AppRouter() {
         <Route path="/power-nap" element={<PowerNapPage />} />
         <Route path="/penalty" element={<PenaltyPage />} />
         <Route path="/mypage" element={<MyPage />} />
+        <Route path="/chat" element={<StudentChatPage />} />
       </Route>
 
       <Route
@@ -79,6 +82,7 @@ export function AppRouter() {
         <Route path="warnings" element={<WarningsPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="requests" element={<RequestsPage />} />
+        <Route path="chat" element={<AdminChatPage />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />

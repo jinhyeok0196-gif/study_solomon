@@ -8,12 +8,13 @@ const NAV_ITEMS = [
   { to: STUDENT_PATHS.attendance, label: '출결' },
   { to: STUDENT_PATHS.powerNap, label: '파워냅' },
   { to: STUDENT_PATHS.penalty, label: '벌점' },
+  { to: STUDENT_PATHS.chat, label: '문의' },
   { to: STUDENT_PATHS.mypage, label: 'MY' },
 ];
 
 export function StudentBottomNav() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 grid grid-cols-6 border-t border-gray-200 bg-white">
+    <nav className="fixed bottom-0 left-0 right-0 grid grid-cols-7 border-t border-gray-200 bg-white">
       {NAV_ITEMS.map((item) => (
         <NavLink
           key={item.to}
