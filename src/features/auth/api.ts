@@ -38,13 +38,13 @@ export async function signInWithGoogle() {
 export async function createStudentProfile(userId: string, name: string, phone: string): Promise<AuthenticatedUser> {
   const { error: userError } = await supabase
     .from('users')
-    .insert({ id: userId, name, phone, role: 'student' });
+    .upsert({ id: userId, name, phone, role: 'student' }, { onConflict: 'id' });
 
   if (userError) throw new Error(`users 등록 실패: ${userError.message}`);
 
   const { error: profileError } = await supabase
     .from('student_profiles')
-    .insert({ id: userId });
+    .upsert({ id: userId }, { onConflict: 'id' });
 
   if (profileError) throw new Error(`student_profiles 등록 실패: ${profileError.message}`);
 
