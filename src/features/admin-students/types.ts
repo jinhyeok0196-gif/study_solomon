@@ -9,9 +9,18 @@ export interface StudentSummary {
   guardianPhone: string | null;
   enrollmentDate: string;
   membershipStatus: string;
+  membershipType: string | null;
+  membershipStartDate: string | null;
+  membershipEndDate: string | null;
   currentPenaltyPoints: number;
   warningCount: number;
   memo: string | null;
+}
+
+export interface GrantMembershipInput {
+  startDate: string;
+  endDate: string;
+  type: string;
 }
 
 export interface CreateStudentInput {

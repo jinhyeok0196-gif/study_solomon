@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase/client';
-import type { CreateStudentInput, StudentSummary, UpdateStudentInput } from './types';
+import type { CreateStudentInput, GrantMembershipInput, StudentSummary, UpdateStudentInput } from './types';
 
 interface StudentProfileJoinRow {
   id: string;
@@ -9,11 +9,17 @@ interface StudentProfileJoinRow {
   guardian_phone: string | null;
   enrollment_date: string;
   membership_status: string;
+  membership_type: string | null;
+  membership_start_date: string | null;
+  membership_end_date: string | null;
   current_penalty_points: number;
   warning_count: number;
   memo: string | null;
   users: { name: string; phone: string; status: string } | null;
 }
+
+const STUDENT_SELECT =
+  'id, student_number, school, grade, guardian_phone, enrollment_date, membership_status, membership_type, membership_start_date, membership_end_date, current_penalty_points, warning_count, memo, users(name, phone, status)';
 
 function mapRow(row: StudentProfileJoinRow): StudentSummary {
   return {
@@ -27,6 +33,9 @@ function mapRow(row: StudentProfileJoinRow): StudentSummary {
     guardianPhone: row.guardian_phone,
     enrollmentDate: row.enrollment_date,
     membershipStatus: row.membership_status,
+    membershipType: row.membership_type,
+    membershipStartDate: row.membership_start_date,
+    membershipEndDate: row.membership_end_date,
     currentPenaltyPoints: row.current_penalty_points,
     warningCount: row.warning_count,
     memo: row.memo,
@@ -36,9 +45,7 @@ function mapRow(row: StudentProfileJoinRow): StudentSummary {
 export async function fetchAllStudents(): Promise<StudentSummary[]> {
   const { data, error } = await supabase
     .from('student_profiles')
-    .select(
-      'id, student_number, school, grade, guardian_phone, enrollment_date, membership_status, current_penalty_points, warning_count, memo, users(name, phone, status)'
-    )
+    .select(STUDENT_SELECT)
     .order('enrollment_date', { ascending: false });
 
   if (error) throw error;
@@ -48,14 +55,28 @@ export async function fetchAllStudents(): Promise<StudentSummary[]> {
 export async function fetchStudentDetail(studentId: string): Promise<StudentSummary> {
   const { data, error } = await supabase
     .from('student_profiles')
-    .select(
-      'id, student_number, school, grade, guardian_phone, enrollment_date, membership_status, current_penalty_points, warning_count, memo, users(name, phone, status)'
-    )
+    .select(STUDENT_SELECT)
     .eq('id', studentId)
     .single();
 
   if (error) throw error;
   return mapRow(data as unknown as StudentProfileJoinRow);
+}
+
+export async function grantMembership(
+  studentId: string,
+  input: GrantMembershipInput
+): Promise<void> {
+  const { error } = await supabase
+    .from('student_profiles')
+    .update({
+      membership_type: input.type,
+      membership_start_date: input.startDate,
+      membership_end_date: input.endDate,
+      membership_status: 'active',
+    })
+    .eq('id', studentId);
+  if (error) throw new Error('이용권 부여 중 오류가 발생했습니다.');
 }
 
 export async function createStudent(input: CreateStudentInput): Promise<void> {

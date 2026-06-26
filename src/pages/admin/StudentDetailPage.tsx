@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { useStudentDetailQuery, useDeleteStudentMutation } from '@/features/admin-students/hooks';
 import { EditStudentForm } from '@/features/admin-students/components/EditStudentForm';
+import { MembershipCard } from '@/features/admin-students/components/MembershipCard';
 import { getWeekStartDate } from '@/features/schedule/dates';
 import { useWeeklyScheduleQuery } from '@/features/schedule/hooks';
 import { WeeklyScheduleGrid } from '@/features/schedule/components/WeeklyScheduleGrid';
@@ -61,6 +62,11 @@ export default function StudentDetailPage() {
       <Card>
         <p className="mb-3 text-sm font-semibold text-gray-700">정보 수정</p>
         <EditStudentForm student={student} />
+      </Card>
+
+      <Card>
+        <p className="mb-3 text-sm font-semibold text-gray-700">이용권 관리</p>
+        <MembershipCard student={student} />
       </Card>
 
       <Card>

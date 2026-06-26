@@ -4,9 +4,10 @@ import {
   deleteStudent,
   fetchAllStudents,
   fetchStudentDetail,
+  grantMembership,
   updateStudent,
 } from './api';
-import type { CreateStudentInput, UpdateStudentInput } from './types';
+import type { CreateStudentInput, GrantMembershipInput, UpdateStudentInput } from './types';
 
 export function useStudentsQuery() {
   return useQuery({
@@ -46,5 +47,16 @@ export function useDeleteStudentMutation() {
   return useMutation({
     mutationFn: (studentId: string) => deleteStudent(studentId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-students'] }),
+  });
+}
+
+export function useGrantMembershipMutation(studentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: GrantMembershipInput) => grantMembership(studentId, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-students'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-student-detail', studentId] });
+    },
   });
 }
