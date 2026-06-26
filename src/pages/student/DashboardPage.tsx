@@ -2,8 +2,8 @@ import { isSameMonth } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { usePeriods } from '@/hooks/usePeriods';
-import { getWeekStartDate, todayDayOfWeekKey } from '@/features/schedule/dates';
-import { useWeeklyScheduleQuery } from '@/features/schedule/hooks';
+import { useCurrentTime } from '@/hooks/useCurrentTime';
+import { useScheduleStatus } from '@/hooks/useScheduleStatus';
 import { useAttendanceRecordsQuery } from '@/features/attendance/hooks';
 import { computeAttendanceStats } from '@/features/attendance/stats';
 import { usePenaltyProfileQuery } from '@/features/penalty/hooks';
@@ -11,7 +11,9 @@ import { computeRiskLevel } from '@/features/penalty/risk';
 import { STUDENT_PATHS } from '@/routes/paths';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { CurrentPeriodCard } from '@/components/schedule/CurrentPeriodCard';
+import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
+import { StudentStatusBadge } from '@/components/schedule/StudentStatusBadge';
 
 const QUICK_LINKS = [
   { to: STUDENT_PATHS.outing, label: '외출' },
@@ -23,45 +25,36 @@ const QUICK_LINKS = [
 export default function DashboardPage() {
   const { user } = useAuth();
   const studentId = user!.id;
+  const now = useCurrentTime(1000);
 
   const { data: periods } = usePeriods();
-  const { data: weeklySchedule } = useWeeklyScheduleQuery(studentId, getWeekStartDate(0));
   const { data: attendanceRecords } = useAttendanceRecordsQuery(studentId);
   const { data: penaltyProfile } = usePenaltyProfileQuery(studentId);
 
-  const todayKey = todayDayOfWeekKey();
-  const todayPeriodNumbers = (weeklySchedule?.cells ?? [])
-    .filter((cell) => cell.dayOfWeek === todayKey)
-    .map((cell) => cell.periodNumber)
-    .sort((a, b) => a - b);
+  const scheduleStatus = useScheduleStatus(periods, now);
 
   const allRecords = attendanceRecords ?? [];
-  const monthRecords = allRecords.filter((record) => isSameMonth(new Date(record.classDate), new Date()));
+  const monthRecords = allRecords.filter((record) =>
+    isSameMonth(new Date(record.classDate), new Date())
+  );
   const stats = computeAttendanceStats(allRecords, monthRecords);
-
   const risk = penaltyProfile ? computeRiskLevel(penaltyProfile.currentPenaltyPoints) : null;
 
   return (
-    <div className="flex flex-col gap-6 p-4">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900">{user!.name}님, 안녕하세요</h2>
-        <p className="text-sm text-gray-500">오늘도 솔로몬스터디카페에서 좋은 하루 보내세요.</p>
+    <div className="flex flex-col gap-4 p-4">
+      {/* 인사 + 현재 상태 */}
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">{user!.name}님, 안녕하세요</h2>
+          <p className="text-sm text-gray-500">솔로몬스터디카페</p>
+        </div>
+        <StudentStatusBadge currentSlot={scheduleStatus.currentSlot} />
       </div>
 
-      <Card>
-        <p className="mb-2 text-sm font-semibold text-gray-700">오늘의 시간표</p>
-        {todayPeriodNumbers.length === 0 ? (
-          <EmptyState title="오늘 등록된 교시가 없습니다" />
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {todayPeriodNumbers.map((periodNumber) => {
-              const label = periods?.find((p) => p.period_number === periodNumber)?.label ?? `${periodNumber}교시`;
-              return <Badge key={periodNumber}>{label}</Badge>;
-            })}
-          </div>
-        )}
-      </Card>
+      {/* 현재 진행 중 + 남은 시간 + 다음 일정 */}
+      <CurrentPeriodCard status={scheduleStatus} upcomingAlert={scheduleStatus.upcomingClassAlert} />
 
+      {/* 통계 */}
       <div className="grid grid-cols-2 gap-3">
         <Card>
           <p className="text-xs text-gray-500">이번달 출석률</p>
@@ -76,6 +69,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      {/* 빠른 링크 */}
       <div className="grid grid-cols-4 gap-2">
         {QUICK_LINKS.map((link) => (
           <Link
@@ -86,6 +80,12 @@ export default function DashboardPage() {
             {link.label}
           </Link>
         ))}
+      </div>
+
+      {/* 오늘 일정 타임라인 */}
+      <div>
+        <p className="mb-3 text-sm font-semibold text-gray-700">오늘 일정</p>
+        <ScheduleTimeline timeline={scheduleStatus.timeline} />
       </div>
     </div>
   );
