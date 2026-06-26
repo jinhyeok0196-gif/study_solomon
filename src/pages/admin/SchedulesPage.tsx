@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useQueryClient } from '@tanstack/react-query';
 import { useStudentsQuery } from '@/features/admin-students/hooks';
 import {
   useScheduleForDateQuery,
@@ -12,7 +13,8 @@ import { useWeeklyScheduleQuery } from '@/features/schedule/hooks';
 import { WeeklyScheduleGrid } from '@/features/schedule/components/WeeklyScheduleGrid';
 import { cellKey } from '@/features/schedule/types';
 import { formatWeekRangeLabel, getWeekStartDate } from '@/features/schedule/dates';
-import { usePeriods } from '@/hooks/usePeriods';
+import { usePeriods, type PeriodRow } from '@/hooks/usePeriods';
+import { supabase } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
@@ -23,13 +25,14 @@ import { Input } from '@/components/ui/Input';
 import { FormField } from '@/components/ui/FormField';
 import type { ScheduleUnlockRequest } from '@/features/admin-schedule/api';
 
-type Tab = 'student' | 'date' | 'week' | 'unlock';
+type Tab = 'student' | 'date' | 'week' | 'unlock' | 'periods';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'student', label: '학생별 조회' },
   { key: 'date', label: '날짜별 조회' },
   { key: 'week', label: '주간 제출현황' },
   { key: 'unlock', label: '수정 요청' },
+  { key: 'periods', label: '교시 설정' },
 ];
 
 function StudentTab() {
@@ -332,6 +335,197 @@ function UnlockTab() {
   );
 }
 
+const CATEGORY_LABEL: Record<string, string> = {
+  class: '수업',
+  meal: '식사',
+  arrival: '등원',
+  free: '자율학습',
+};
+
+function PeriodsTab() {
+  const qc = useQueryClient();
+  const { data: periods, isLoading } = usePeriods();
+  const [editing, setEditing] = useState<PeriodRow | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<PeriodRow>>({});
+
+  function openEdit(period: PeriodRow) {
+    setEditing(period);
+    setEditForm({ ...period });
+  }
+
+  async function handleSave() {
+    if (!editing) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('periods')
+        .update({
+          display_name: editForm.display_name,
+          start_time: editForm.start_time,
+          end_time: editForm.end_time,
+          duration_minutes: editForm.duration_minutes,
+          display_color: editForm.display_color,
+          sort_order: editForm.sort_order,
+          is_selectable: editForm.is_selectable,
+        })
+        .eq('period_number', editing.period_number);
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ['periods'] });
+      setEditing(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (isLoading) {
+    return <div className="flex justify-center py-8"><Spinner /></div>;
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-gray-500">교시 정보를 수정하면 시간표 UI에 즉시 반영됩니다.</p>
+
+      <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-gray-50 text-xs text-gray-500">
+            <tr>
+              <th className="px-3 py-2">순서</th>
+              <th className="px-3 py-2">교시명</th>
+              <th className="px-3 py-2">시간</th>
+              <th className="px-3 py-2">시간(분)</th>
+              <th className="px-3 py-2">구분</th>
+              <th className="px-3 py-2">색상</th>
+              <th className="px-3 py-2">선택가능</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {(periods ?? []).map((period) => (
+              <tr key={period.period_number} className="border-t border-gray-100">
+                <td className="px-3 py-2 text-gray-500">{period.sort_order}</td>
+                <td className="px-3 py-2 font-medium">{period.display_name}</td>
+                <td className="px-3 py-2 text-gray-600">
+                  {period.start_time.slice(0, 5)}~{period.end_time.slice(0, 5)}
+                </td>
+                <td className="px-3 py-2 text-gray-600">
+                  {period.duration_minutes != null ? `${period.duration_minutes}분` : '-'}
+                </td>
+                <td className="px-3 py-2">
+                  <Badge>{CATEGORY_LABEL[period.category] ?? period.category}</Badge>
+                </td>
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-1.5">
+                    <div
+                      style={{ backgroundColor: period.display_color }}
+                      className="w-4 h-4 rounded-full border border-gray-200 inline-block flex-shrink-0"
+                    />
+                    <span className="text-xs text-gray-500">{period.display_color}</span>
+                  </div>
+                </td>
+                <td className="px-3 py-2">
+                  {period.is_selectable ? (
+                    <Badge tone="success">가능</Badge>
+                  ) : (
+                    <Badge tone="default">불가</Badge>
+                  )}
+                </td>
+                <td className="px-3 py-2">
+                  <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => openEdit(period)}>
+                    수정
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal open={!!editing} onClose={() => setEditing(null)} title="교시 설정 수정">
+        {editing && (
+          <div className="flex flex-col gap-3">
+            <FormField label="교시명" htmlFor="edit-display-name">
+              <Input
+                id="edit-display-name"
+                value={editForm.display_name ?? ''}
+                onChange={(e) => setEditForm((f) => ({ ...f, display_name: e.target.value }))}
+              />
+            </FormField>
+            <div className="grid grid-cols-2 gap-2">
+              <FormField label="시작 시간 (HH:MM)" htmlFor="edit-start">
+                <Input
+                  id="edit-start"
+                  value={editForm.start_time?.slice(0, 5) ?? ''}
+                  onChange={(e) => setEditForm((f) => ({ ...f, start_time: e.target.value }))}
+                  placeholder="09:00"
+                />
+              </FormField>
+              <FormField label="종료 시간 (HH:MM)" htmlFor="edit-end">
+                <Input
+                  id="edit-end"
+                  value={editForm.end_time?.slice(0, 5) ?? ''}
+                  onChange={(e) => setEditForm((f) => ({ ...f, end_time: e.target.value }))}
+                  placeholder="10:20"
+                />
+              </FormField>
+            </div>
+            <FormField label="수업 시간 (분)" htmlFor="edit-duration">
+              <Input
+                id="edit-duration"
+                type="number"
+                value={editForm.duration_minutes ?? ''}
+                onChange={(e) =>
+                  setEditForm((f) => ({
+                    ...f,
+                    duration_minutes: e.target.value === '' ? null : Number(e.target.value),
+                  }))
+                }
+              />
+            </FormField>
+            <FormField label="표시 색상" htmlFor="edit-color">
+              <div className="flex items-center gap-2">
+                <input
+                  id="edit-color"
+                  type="color"
+                  value={editForm.display_color ?? '#16a34a'}
+                  onChange={(e) => setEditForm((f) => ({ ...f, display_color: e.target.value }))}
+                  className="h-9 w-14 cursor-pointer rounded border border-gray-300 p-1"
+                />
+                <span className="text-sm text-gray-600">{editForm.display_color}</span>
+              </div>
+            </FormField>
+            <FormField label="표시 순서" htmlFor="edit-sort">
+              <Input
+                id="edit-sort"
+                type="number"
+                value={editForm.sort_order ?? 0}
+                onChange={(e) => setEditForm((f) => ({ ...f, sort_order: Number(e.target.value) }))}
+              />
+            </FormField>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={editForm.is_selectable ?? false}
+                onChange={(e) => setEditForm((f) => ({ ...f, is_selectable: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              학생 신청 가능 교시
+            </label>
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setEditing(null)}>
+                취소
+              </Button>
+              <Button className="flex-1" onClick={handleSave} disabled={saving}>
+                {saving ? '저장 중...' : '저장'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
 export default function SchedulesPage() {
   const [tab, setTab] = useState<Tab>('student');
 
@@ -351,6 +545,7 @@ export default function SchedulesPage() {
       {tab === 'date' && <DateTab />}
       {tab === 'week' && <WeekTab />}
       {tab === 'unlock' && <UnlockTab />}
+      {tab === 'periods' && <PeriodsTab />}
     </div>
   );
 }

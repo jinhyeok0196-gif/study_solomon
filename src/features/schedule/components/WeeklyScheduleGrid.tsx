@@ -16,6 +16,16 @@ interface DragState {
   affectedKeys: Set<string>;
 }
 
+function fmtTime(t: string) {
+  return t.slice(0, 5);
+}
+
+function categoryLabel(category: string) {
+  if (category === 'meal') return '식사 시간';
+  if (category === 'arrival') return '등원 시간';
+  return '자율학습';
+}
+
 export function WeeklyScheduleGrid({ selected, onCellChange, readOnly = false }: WeeklyScheduleGridProps) {
   const { data: periods } = usePeriods();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -26,7 +36,6 @@ export function WeeklyScheduleGrid({ selected, onCellChange, readOnly = false }:
     affectedKeys: new Set(),
   });
 
-  // Use ref to always access latest onCellChange in stable callbacks
   const onCellChangeRef = useRef(onCellChange);
   onCellChangeRef.current = onCellChange;
 
@@ -113,10 +122,10 @@ export function WeeklyScheduleGrid({ selected, onCellChange, readOnly = false }:
 
   return (
     <div ref={containerRef} className="overflow-x-auto select-none">
-      <table className="w-full min-w-[480px] border-collapse text-center text-sm">
+      <table className="w-full min-w-[340px] border-collapse text-center text-sm">
         <thead>
           <tr>
-            <th className="w-16 border-b border-gray-200 p-2 text-xs text-gray-500">교시</th>
+            <th className="w-20 min-w-[80px] border-b border-gray-200 p-2 text-left text-xs text-gray-500">교시</th>
             {DAYS_OF_WEEK.map((day) => (
               <th key={day} className="border-b border-gray-200 p-2 text-xs text-gray-500">
                 {DAY_OF_WEEK_LABEL[day]}
@@ -125,41 +134,74 @@ export function WeeklyScheduleGrid({ selected, onCellChange, readOnly = false }:
           </tr>
         </thead>
         <tbody>
-          {(periods ?? []).map((period) => (
-            <tr key={period.period_number}>
-              <td className="border-b border-gray-100 p-2 text-xs text-gray-500">
-                {period.label}
-              </td>
-              {DAYS_OF_WEEK.map((day) => {
-                const key = cellKey(day, period.period_number);
-                const isSelected = visualSelected.has(key);
-                return (
-                  <td key={key} className="border-b border-gray-100 p-1">
-                    <button
-                      type="button"
-                      data-day={day}
-                      data-period={period.period_number}
-                      disabled={readOnly}
-                      onMouseDown={(e) => startDrag(day, period.period_number, e)}
-                      onMouseEnter={() => applyDragCell(day, period.period_number)}
-                      onTouchStart={(e) => startDrag(day, period.period_number, e)}
-                      onContextMenu={(e) => e.preventDefault()}
-                      aria-pressed={isSelected}
-                      className={cn(
-                        'h-8 w-8 rounded-md border text-xs transition-colors',
-                        isSelected
-                          ? 'border-brand-600 bg-brand-600 text-white'
-                          : 'border-gray-200 bg-white text-transparent hover:border-brand-300',
-                        readOnly && 'cursor-default opacity-70 hover:border-gray-200'
-                      )}
-                    >
-                      {isSelected ? '✓' : '·'}
-                    </button>
+          {(periods ?? []).map((period) => {
+            if (!period.is_selectable) {
+              return (
+                <tr key={period.period_number} style={{ backgroundColor: period.display_color + '30' }}>
+                  <td
+                    style={{ borderLeftColor: period.display_color }}
+                    className="border-l-4 border-b border-gray-100 p-1.5 text-left w-20 min-w-[80px]"
+                  >
+                    <p className="text-xs font-semibold text-gray-700 leading-tight">{period.display_name}</p>
+                    <p className="text-[10px] text-gray-500 leading-tight mt-0.5">
+                      {fmtTime(period.start_time)}~{fmtTime(period.end_time)}
+                    </p>
+                    {period.duration_minutes != null && (
+                      <p className="text-[10px] text-gray-400 leading-tight">{period.duration_minutes}분</p>
+                    )}
                   </td>
-                );
-              })}
-            </tr>
-          ))}
+                  <td colSpan={7} className="border-b border-gray-100 px-2 py-1 text-left">
+                    <span className="text-xs text-gray-500">{categoryLabel(period.category)}</span>
+                  </td>
+                </tr>
+              );
+            }
+
+            return (
+              <tr key={period.period_number}>
+                <td
+                  style={{ borderLeftColor: period.display_color }}
+                  className="border-l-4 border-b border-gray-100 p-1.5 text-left w-20 min-w-[80px]"
+                >
+                  <p className="text-xs font-semibold text-gray-900 leading-tight">{period.display_name}</p>
+                  <p className="text-[10px] text-gray-500 leading-tight mt-0.5">
+                    {fmtTime(period.start_time)}~{fmtTime(period.end_time)}
+                  </p>
+                  {period.duration_minutes != null && (
+                    <p className="text-[10px] text-gray-400 leading-tight">{period.duration_minutes}분</p>
+                  )}
+                </td>
+                {DAYS_OF_WEEK.map((day) => {
+                  const key = cellKey(day, period.period_number);
+                  const isSelected = visualSelected.has(key);
+                  return (
+                    <td key={key} className="border-b border-gray-100 p-1">
+                      <button
+                        type="button"
+                        data-day={day}
+                        data-period={period.period_number}
+                        disabled={readOnly}
+                        onMouseDown={(e) => startDrag(day, period.period_number, e)}
+                        onMouseEnter={() => applyDragCell(day, period.period_number)}
+                        onTouchStart={(e) => startDrag(day, period.period_number, e)}
+                        onContextMenu={(e) => e.preventDefault()}
+                        aria-pressed={isSelected}
+                        className={cn(
+                          'h-8 w-8 rounded-md border text-xs transition-colors',
+                          isSelected
+                            ? 'border-brand-600 bg-brand-600 text-white'
+                            : 'border-gray-200 bg-white text-transparent hover:border-brand-300',
+                          readOnly && 'cursor-default opacity-70 hover:border-gray-200'
+                        )}
+                      >
+                        {isSelected ? '✓' : '·'}
+                      </button>
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

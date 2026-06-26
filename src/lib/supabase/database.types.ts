@@ -443,29 +443,47 @@ export type Database = {
       }
       periods: {
         Row: {
+          category: string
           created_at: string
+          display_color: string
+          display_name: string | null
+          duration_minutes: number | null
           end_time: string
           is_active: boolean
+          is_selectable: boolean
           label: string
           period_number: number
+          sort_order: number
           start_time: string
           updated_at: string
         }
         Insert: {
+          category?: string
           created_at?: string
+          display_color?: string
+          display_name?: string | null
+          duration_minutes?: number | null
           end_time: string
           is_active?: boolean
+          is_selectable?: boolean
           label: string
           period_number: number
+          sort_order?: number
           start_time: string
           updated_at?: string
         }
         Update: {
+          category?: string
           created_at?: string
+          display_color?: string
+          display_name?: string | null
+          duration_minutes?: number | null
           end_time?: string
           is_active?: boolean
+          is_selectable?: boolean
           label?: string
           period_number?: number
+          sort_order?: number
           start_time?: string
           updated_at?: string
         }
