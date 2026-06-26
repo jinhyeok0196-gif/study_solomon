@@ -40,13 +40,13 @@ export async function createStudentProfile(userId: string, name: string, phone: 
     .from('users')
     .insert({ id: userId, name, phone, role: 'student' });
 
-  if (userError) throw userError;
+  if (userError) throw new Error(`users 등록 실패: ${userError.message}`);
 
   const { error: profileError } = await supabase
     .from('student_profiles')
     .insert({ id: userId });
 
-  if (profileError) throw profileError;
+  if (profileError) throw new Error(`student_profiles 등록 실패: ${profileError.message}`);
 
   return { id: userId, name, phone, role: 'student' };
 }
