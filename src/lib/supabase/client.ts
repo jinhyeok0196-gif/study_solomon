@@ -16,5 +16,19 @@ export const supabase = createClient<Database>(
       persistSession: true,
       autoRefreshToken: true,
     },
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
+      },
+    },
   }
 );
+
+// Realtime WebSocket 연결은 HTTP REST와 별도로 JWT를 전달해야 한다.
+// 세션 로드/갱신 시 setAuth를 호출하지 않으면 WebSocket이 anon 권한으로만
+// 연결되어 RLS 채널(postgres_changes, presence)이 SUBSCRIBED에 도달하지 못한다.
+supabase.auth.onAuthStateChange((_event, session) => {
+  if (session?.access_token) {
+    supabase.realtime.setAuth(session.access_token);
+  }
+});

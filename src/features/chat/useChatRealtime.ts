@@ -20,9 +20,15 @@ export function useChatRealtime({
   const channelRef = useRef<RealtimeChannel | null>(null);
   const onNewMessageRef = useRef(onNewMessage);
   onNewMessageRef.current = onNewMessage;
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const setupChannel = useCallback(() => {
     if (!roomId) return;
+
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
 
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
@@ -30,9 +36,7 @@ export function useChatRealtime({
     }
 
     const channel = supabase
-      .channel(`chat-realtime-${roomId}`, {
-        config: { broadcast: { self: false } },
-      })
+      .channel(`chat-realtime-${roomId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${roomId}` },
@@ -78,8 +82,8 @@ export function useChatRealtime({
         }
       )
       .subscribe((status) => {
-        if (status === 'CHANNEL_ERROR') {
-          setTimeout(() => setupChannel(), 3000);
+        if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
+          retryTimerRef.current = setTimeout(() => setupChannel(), 4000);
         }
       });
 
@@ -89,6 +93,10 @@ export function useChatRealtime({
   useEffect(() => {
     setupChannel();
     return () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;

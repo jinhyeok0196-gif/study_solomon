@@ -17,10 +17,25 @@ export function useChatPresence(userId: string, role: 'student' | 'admin', name:
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const channelRef = useRef<RealtimeChannel | null>(null);
-  // 현재 presence 데이터 추적 (track 호출 시 최신 상태 유지)
   const currentDataRef = useRef<PresenceUser>({ userId, role, name, onlineAt: Date.now() });
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 최신 setupChannel을 setTimeout 클로저에서 참조하기 위한 ref
+  const setupChannelRef = useRef<() => void>(() => undefined);
 
-  useEffect(() => {
+  const setupChannel = useCallback(() => {
+    if (!userId) return;
+
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+
+    if (channelRef.current) {
+      void channelRef.current.untrack();
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
     const channel = supabase
       .channel('chat-global-presence', {
         config: { presence: { key: userId } },
@@ -39,20 +54,46 @@ export function useChatPresence(userId: string, role: 'student' | 'admin', name:
         if (status === 'SUBSCRIBED') {
           setConnectionStatus('connected');
           await channel.track(currentDataRef.current);
-        } else if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+        } else if (status === 'TIMED_OUT') {
+          // 타임아웃: 서버가 join 요청에 응답하지 않음 → JWT 없거나 네트워크 지연
+          setConnectionStatus('connecting');
+          retryTimerRef.current = setTimeout(() => setupChannelRef.current(), 3000);
+        } else if (status === 'CHANNEL_ERROR') {
+          // 채널 에러: join 거부됨 → RLS/권한 문제 또는 서버 오류
           setConnectionStatus('disconnected');
+          retryTimerRef.current = setTimeout(() => setupChannelRef.current(), 5000);
+        } else if (status === 'CLOSED') {
+          setConnectionStatus('disconnected');
+          retryTimerRef.current = setTimeout(() => setupChannelRef.current(), 5000);
         } else {
           setConnectionStatus('connecting');
         }
       });
 
     channelRef.current = channel;
+  }, [userId, role, name]);
+
+  // 항상 최신 setupChannel을 ref에 저장
+  setupChannelRef.current = setupChannel;
+
+  useEffect(() => {
+    // userId/role/name 의존값이 준비된 뒤에만 채널 생성
+    if (!userId) return;
+    currentDataRef.current = { userId, role, name, onlineAt: Date.now() };
+    setupChannel();
 
     return () => {
-      channel.untrack();
-      supabase.removeChannel(channel);
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+      if (channelRef.current) {
+        void channelRef.current.untrack();
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
-  }, [userId, role, name]);
+  }, [setupChannel, userId, role, name]);
 
   const isOnline = (targetUserId: string) =>
     onlineUsers.some((u) => u.userId === targetUserId);
@@ -62,17 +103,13 @@ export function useChatPresence(userId: string, role: 'student' | 'admin', name:
     return u?.onlineAt ?? null;
   };
 
-  // Presence 기반 입력 중 전송 (Broadcast보다 안정적)
-  const sendTyping = useCallback(
-    async (roomId: string) => {
-      const channel = channelRef.current;
-      if (!channel) return;
-      const data: PresenceUser = { ...currentDataRef.current, isTyping: true, typingInRoom: roomId };
-      currentDataRef.current = data;
-      await channel.track(data);
-    },
-    []
-  );
+  const sendTyping = useCallback(async (roomId: string) => {
+    const channel = channelRef.current;
+    if (!channel) return;
+    const data: PresenceUser = { ...currentDataRef.current, isTyping: true, typingInRoom: roomId };
+    currentDataRef.current = data;
+    await channel.track(data);
+  }, []);
 
   const stopTyping = useCallback(async () => {
     const channel = channelRef.current;
@@ -83,7 +120,6 @@ export function useChatPresence(userId: string, role: 'student' | 'admin', name:
     await channel.track(data);
   }, []);
 
-  // 특정 방에서 입력 중인 사용자 목록 (나 자신 제외)
   const getTypingUsersInRoom = useCallback(
     (roomId: string | null | undefined): PresenceUser[] => {
       if (!roomId) return [];
