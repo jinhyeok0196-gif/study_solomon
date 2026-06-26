@@ -36,18 +36,8 @@ export async function signInWithGoogle() {
 }
 
 export async function createStudentProfile(userId: string, name: string, phone: string): Promise<AuthenticatedUser> {
-  const { error: userError } = await supabase
-    .from('users')
-    .upsert({ id: userId, name, phone, role: 'student' }, { onConflict: 'id' });
-
-  if (userError) throw new Error(`users 등록 실패: ${userError.message}`);
-
-  const { error: profileError } = await supabase
-    .from('student_profiles')
-    .upsert({ id: userId }, { onConflict: 'id' });
-
-  if (profileError) throw new Error(`student_profiles 등록 실패: ${profileError.message}`);
-
+  const { error } = await supabase.rpc('register_student', { p_name: name, p_phone: phone });
+  if (error) throw new Error(`가입 실패: ${error.message}`);
   return { id: userId, name, phone, role: 'student' };
 }
 

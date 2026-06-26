@@ -769,6 +769,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      register_student: {
+        Args: { p_name: string; p_phone: string }
+        Returns: undefined
+      }
       approve_request_log: {
         Args: { p_request_id: string; p_admin_id: string; p_admin_note?: string }
         Returns: undefined

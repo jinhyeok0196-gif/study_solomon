@@ -35,7 +35,7 @@ export default function MyPage() {
   const { user } = useAuth();
   const studentId = user!.id;
 
-  const { data: profile, isLoading } = useMyProfileQuery(studentId);
+  const { data: profile, isLoading, isError } = useMyProfileQuery(studentId);
   const { data: requestLogs } = useMyRequestLogsQuery(studentId);
   const { data: attendanceRecords } = useAttendanceRecordsQuery(studentId);
   const { data: penaltyRecords } = usePenaltyRecordsQuery(studentId);
@@ -90,8 +90,17 @@ export default function MyPage() {
   const hasPendingRequest = (type: ModalKind) =>
     requestLogs?.some((r) => r.requestType === (type === 'name' ? 'name_change' : type === 'phone' ? 'phone_change' : 'withdrawal') && r.status === 'pending');
 
-  if (isLoading || !profile) {
+  if (isLoading) {
     return <div className="flex justify-center py-12"><Spinner /></div>;
+  }
+
+  if (isError || !profile) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
+        <p className="text-sm font-medium text-gray-700">프로필 정보를 불러올 수 없습니다.</p>
+        <p className="text-xs text-gray-400">관리자에게 계정 등록을 요청해주세요.</p>
+      </div>
+    );
   }
 
   const unreadCount = (notifications ?? []).filter((n) => !n.is_read).length;
