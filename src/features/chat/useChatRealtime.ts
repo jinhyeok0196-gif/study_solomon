@@ -35,8 +35,11 @@ export function useChatRealtime({
       channelRef.current = null;
     }
 
+    // topic을 매번 고유하게 만든다. 같은 이름을 재사용하면 removeChannel 이 끝나기 전
+    // 재시도가 겹칠 때 이미 subscribe 된 채널에 .on() 을 호출해
+    // "cannot add postgres_changes callbacks ... after subscribe()" 예외로 앱이 크래시한다.
     const channel = supabase
-      .channel(`chat-realtime-${roomId}`)
+      .channel(`chat-realtime-${roomId}-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${roomId}` },
