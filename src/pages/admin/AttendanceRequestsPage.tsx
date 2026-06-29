@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useCurrentTime } from '@/hooks/useCurrentTime';
+import { formatElapsed } from '@/lib/time';
 import {
   useAttendanceRequestsQuery,
   useReviewAttendanceRequestMutation,
@@ -60,6 +62,7 @@ export default function AttendanceRequestsPage() {
   const { data: outings } = useAdminOutingsQuery();
   const { data: periods } = usePeriods();
   const review = useReviewAttendanceRequestMutation();
+  const now = useCurrentTime(1000); // 진행 중 외출 시간 실시간 갱신
 
   type Action = 'approved' | 'rejected' | 'pending';
   const [tab, setTab] = useState<Tab>('all');
@@ -127,8 +130,13 @@ export default function AttendanceRequestsPage() {
                   </div>
                   <p className="mt-1 text-sm text-gray-600">
                     시작: <span className="font-medium">{fmtDateTime(o.startedAt)}</span> · 시간:{' '}
-                    <span className="font-medium">{outingMinutes(o.startedAt, o.endedAt)}분</span>
-                    {!o.endedAt && ' (진행중)'}
+                    {o.endedAt ? (
+                      <span className="font-medium">{outingMinutes(o.startedAt, o.endedAt)}분</span>
+                    ) : (
+                      <span className="font-medium tabular-nums text-amber-600">
+                        {formatElapsed(o.startedAt, now)} (진행중)
+                      </span>
+                    )}
                   </p>
                   {o.reason && <p className="mt-0.5 text-sm text-gray-500">사유: {o.reason}</p>}
                   <div className="mt-3 border-t border-gray-100 pt-2">
