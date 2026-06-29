@@ -132,12 +132,12 @@ export function WeeklyScheduleGrid({
 
   return (
     <div ref={containerRef} className="overflow-x-auto select-none">
-      <table className="w-full min-w-[340px] border-collapse text-center text-sm">
+      <table className="w-full min-w-[340px] border-collapse border border-black text-center text-sm">
         <thead>
           <tr>
-            <th className="w-20 min-w-[80px] border-b border-gray-200 p-2 text-left text-xs text-gray-500">교시</th>
+            <th className="w-20 min-w-[80px] border border-black p-2 text-left text-xs text-gray-500">교시</th>
             {DAYS_OF_WEEK.map((day) => (
-              <th key={day} className="border-b border-gray-200 p-2 text-xs text-gray-500">
+              <th key={day} className="border border-black p-2 text-xs text-gray-500">
                 {DAY_OF_WEEK_LABEL[day]}
               </th>
             ))}
@@ -150,7 +150,7 @@ export function WeeklyScheduleGrid({
                 <tr key={period.period_number} style={{ backgroundColor: period.display_color + '30' }}>
                   <td
                     style={{ borderLeftColor: period.display_color }}
-                    className="border-l-4 border-b border-gray-100 p-1.5 text-left w-20 min-w-[80px]"
+                    className="border border-black border-l-4 p-1.5 text-left w-20 min-w-[80px]"
                   >
                     <p className="text-xs font-semibold text-gray-700 leading-tight">{period.display_name}</p>
                     <p className="text-[10px] text-gray-500 leading-tight mt-0.5">
@@ -160,7 +160,7 @@ export function WeeklyScheduleGrid({
                       <p className="text-[10px] text-gray-400 leading-tight">{period.duration_minutes}분</p>
                     )}
                   </td>
-                  <td colSpan={7} className="border-b border-gray-100 px-2 py-1 text-left">
+                  <td colSpan={7} className="border border-black px-2 py-1 text-left">
                     <span className="text-xs text-gray-500">{categoryLabel(period.category)}</span>
                   </td>
                 </tr>
@@ -171,7 +171,7 @@ export function WeeklyScheduleGrid({
               <tr key={period.period_number}>
                 <td
                   style={{ borderLeftColor: period.display_color }}
-                  className="border-l-4 border-b border-gray-100 p-1.5 text-left w-20 min-w-[80px]"
+                  className="border border-black border-l-4 p-1.5 text-left w-20 min-w-[80px]"
                 >
                   <p className="text-xs font-semibold text-gray-900 leading-tight">{period.display_name}</p>
                   <p className="text-[10px] text-gray-500 leading-tight mt-0.5">
@@ -191,7 +191,7 @@ export function WeeklyScheduleGrid({
                       ? { label: '조퇴승인', btn: 'border-amber-500 bg-amber-50 text-amber-600', text: 'text-amber-600' }
                       : null) as { label: string; btn: string; text: string } | null;
                   return (
-                    <td key={key} className="border-b border-gray-100 p-1">
+                    <td key={key} className="border border-black p-1">
                       <div className="flex flex-col items-center gap-0.5">
                         <button
                           type="button"

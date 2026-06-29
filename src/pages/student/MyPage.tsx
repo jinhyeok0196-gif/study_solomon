@@ -278,7 +278,7 @@ export default function MyPage() {
       {/* 순공시간 */}
       <section>
         <h3 className="mb-2 text-sm font-semibold text-gray-700">순공시간</h3>
-        <Card>
+        <Card style={{ border: '2px solid #000' }}>
           <div className="mb-3 grid grid-cols-4 gap-1 rounded-lg bg-gray-100 p-1">
             {([
               ['day', '일'],

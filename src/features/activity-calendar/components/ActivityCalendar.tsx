@@ -151,7 +151,7 @@ export function ActivityCalendar({ studentId }: Props) {
               onClick={() => setSelectedKey(key)}
               className={cn(
                 'flex h-16 flex-col items-center justify-start rounded-md border py-1 transition-colors',
-                isSelected ? 'border-brand-500 bg-brand-50' : 'border-transparent hover:bg-gray-50',
+                isSelected ? 'border-brand-500 bg-brand-50' : 'border-black hover:bg-gray-50',
                 tone === 'absent' && !isSelected && 'bg-red-50',
                 !inMonth && 'opacity-40'
               )}
