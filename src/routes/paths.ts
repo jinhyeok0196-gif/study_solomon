@@ -25,6 +25,7 @@ export const ADMIN_PATHS = {
   warnings: '/admin/warnings',
   notifications: '/admin/notifications',
   requests: '/admin/requests',
+  attendanceRequests: '/admin/attendance-requests',
   chat: '/admin/chat',
   monitor: '/admin/monitor',
   checkinQr: '/admin/checkin-qr',

@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { to: ADMIN_PATHS.students, label: '학생 관리' },
   { to: ADMIN_PATHS.schedules, label: '시간표 관리' },
   { to: ADMIN_PATHS.attendance, label: '출석 관리' },
+  { to: ADMIN_PATHS.attendanceRequests, label: '결석·조퇴 신청' },
   { to: ADMIN_PATHS.penalties, label: '벌점 관리' },
   { to: ADMIN_PATHS.warnings, label: '경고 관리' },
   { to: ADMIN_PATHS.notifications, label: '알림' },

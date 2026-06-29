@@ -32,6 +32,7 @@ import PenaltiesPage from '@/pages/admin/PenaltiesPage';
 import WarningsPage from '@/pages/admin/WarningsPage';
 import NotificationsPage from '@/pages/admin/NotificationsPage';
 import RequestsPage from '@/pages/admin/RequestsPage';
+import AttendanceRequestsPage from '@/pages/admin/AttendanceRequestsPage';
 import AdminChatPage from '@/pages/admin/ChatPage';
 import AdminMonitorPage from '@/pages/admin/MonitorPage';
 import CheckinQrPage from '@/pages/admin/CheckinQrPage';
@@ -99,6 +100,7 @@ export function AppRouter() {
         <Route path="warnings" element={<WarningsPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="requests" element={<RequestsPage />} />
+        <Route path="attendance-requests" element={<AttendanceRequestsPage />} />
         <Route path="chat" element={<AdminChatPage />} />
         <Route path="monitor" element={<AdminMonitorPage />} />
         <Route path="checkin-qr" element={<CheckinQrPage />} />
