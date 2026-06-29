@@ -205,14 +205,14 @@ export function WeeklyScheduleGrid({
                           aria-pressed={isSelected}
                           title={mark ? `${mark.label}된 교시` : undefined}
                           className={cn(
-                            'h-8 w-8 rounded-md border text-xs transition-colors',
+                            'h-8 w-8 rounded-md border-2 text-xs transition-colors',
                             mark
                               ? cn('font-bold', mark.btn)
                               : isSelected
                                 ? 'border-brand-600 bg-brand-600 text-white'
-                                : 'border-gray-200 bg-white text-transparent hover:border-brand-300',
+                                : 'border-gray-400 bg-white text-transparent hover:border-brand-400',
                             readOnly && 'cursor-default opacity-70',
-                            readOnly && !mark && 'hover:border-gray-200'
+                            readOnly && !mark && 'hover:border-gray-400'
                           )}
                         >
                           {mark ? '✕' : isSelected ? '✓' : '·'}
