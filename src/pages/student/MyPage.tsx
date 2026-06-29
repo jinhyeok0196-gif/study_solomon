@@ -1,11 +1,19 @@
-import { useState } from 'react';
-import { isSameMonth } from 'date-fns';
+import { useMemo, useState } from 'react';
+import { isSameMonth, isSameWeek } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
 import { useMyProfileQuery, useMyRequestLogsQuery, useSubmitRequestLogMutation, useStudentNotificationsQuery, useMarkStudentNotificationReadMutation } from '@/features/mypage/hooks';
 import { useAttendanceRecordsQuery } from '@/features/attendance/hooks';
-import { computeAttendanceStats } from '@/features/attendance/stats';
+import {
+  attendedIntervalsFromRecords,
+  awayDeductionMinutes,
+  computeAttendanceStats,
+} from '@/features/attendance/stats';
 import { useAllExtraStudyQuery } from '@/features/extra-study/hooks';
 import { sumExtraStudyMinutes } from '@/features/extra-study/api';
+import { useAllOutingsQuery } from '@/features/outing/hooks';
+import { useRecentNapsQuery } from '@/features/powernap/hooks';
+import { buildDailyStudyMinutes } from '@/features/activity-calendar/aggregate';
+import { cn } from '@/lib/utils';
 import { usePenaltyRecordsQuery } from '@/features/penalty/hooks';
 import { computeRiskLevel } from '@/features/penalty/risk';
 import { PENALTY_REASON_LABEL, type PenaltyReasonCode } from '@/constants/penaltyRules';
@@ -62,14 +70,47 @@ export default function MyPage() {
   const closeModal = () => setModalKind(null);
 
   const { data: extraStudyLogs } = useAllExtraStudyQuery(studentId);
+  const { data: outingLogs } = useAllOutingsQuery(studentId);
+  const { data: napLogs } = useRecentNapsQuery(studentId);
   const allRecords = attendanceRecords ?? [];
   const monthRecords = allRecords.filter((r) => isSameMonth(new Date(r.classDate), new Date()));
+  const awayDeduction = awayDeductionMinutes(
+    attendedIntervalsFromRecords(allRecords),
+    [...(outingLogs ?? []), ...(napLogs ?? [])].map((l) => ({
+      startedAt: l.started_at,
+      endedAt: l.ended_at,
+    }))
+  );
   const stats = computeAttendanceStats(
     allRecords,
     monthRecords,
-    sumExtraStudyMinutes(extraStudyLogs ?? [])
+    sumExtraStudyMinutes(extraStudyLogs ?? []),
+    awayDeduction
   );
   const riskLevel = profile ? computeRiskLevel(profile.currentPenaltyPoints) : null;
+
+  // 순공시간: 일/주간/월간/누적 선택
+  const [studyRange, setStudyRange] = useState<'day' | 'week' | 'month' | 'all'>('day');
+  const studyMap = useMemo(
+    () => buildDailyStudyMinutes(allRecords, extraStudyLogs ?? [], outingLogs ?? [], napLogs ?? []),
+    [allRecords, extraStudyLogs, outingLogs, napLogs]
+  );
+  const studyTotals = useMemo(() => {
+    const now = new Date();
+    const todayKey = now.toISOString().slice(0, 10);
+    let day = 0,
+      week = 0,
+      month = 0,
+      all = 0;
+    for (const [k, v] of studyMap) {
+      const d = new Date(`${k}T00:00:00`);
+      all += v;
+      if (k === todayKey) day += v;
+      if (isSameWeek(d, now, { weekStartsOn: 1 })) week += v;
+      if (isSameMonth(d, now)) month += v;
+    }
+    return { day, week, month, all };
+  }, [studyMap]);
 
   const PENALTY_THRESHOLD = 15;
   const nextWarningAt =
@@ -224,13 +265,39 @@ export default function MyPage() {
             <p className="text-xs text-gray-500">지각 횟수</p>
             <p className="text-2xl font-bold text-gray-900">{stats.lateCount}회</p>
           </Card>
-          <Card>
-            <p className="text-xs text-gray-500">누적 공부시간</p>
-            <p className="text-2xl font-bold text-gray-900">
-              {Math.floor(stats.cumulativeStudyMinutes / 60)}h
-            </p>
-          </Card>
         </div>
+      </section>
+
+      {/* 순공시간 */}
+      <section>
+        <h3 className="mb-2 text-sm font-semibold text-gray-700">순공시간</h3>
+        <Card>
+          <div className="mb-3 grid grid-cols-4 gap-1 rounded-lg bg-gray-100 p-1">
+            {([
+              ['day', '일'],
+              ['week', '주간'],
+              ['month', '월간'],
+              ['all', '누적'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setStudyRange(value)}
+                className={cn(
+                  'rounded-md py-1.5 text-sm font-medium transition-colors',
+                  studyRange === value ? 'bg-white text-brand-700 shadow-sm' : 'text-gray-500'
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-center text-3xl font-bold text-gray-900">
+            {Math.floor(studyTotals[studyRange] / 60)}
+            <span className="text-lg font-semibold text-gray-500">시간 </span>
+            {studyTotals[studyRange] % 60}
+            <span className="text-lg font-semibold text-gray-500">분</span>
+          </p>
+        </Card>
       </section>
 
       {/* 요청 이력 */}

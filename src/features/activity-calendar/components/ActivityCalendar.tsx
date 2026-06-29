@@ -19,7 +19,14 @@ import { PENALTY_REASON_LABEL, type PenaltyReasonCode } from '@/constants/penalt
 import { useAttendanceRecordsQuery } from '@/features/attendance/hooks';
 import { usePenaltyRecordsQuery, useWarningRecordsQuery } from '@/features/penalty/hooks';
 import { useRecentNapsQuery } from '@/features/powernap/hooks';
-import { attendanceTone, buildActivityMap, type DayActivity } from '../aggregate';
+import { useAllExtraStudyQuery } from '@/features/extra-study/hooks';
+import { useAllOutingsQuery } from '@/features/outing/hooks';
+import {
+  attendanceTone,
+  buildActivityMap,
+  buildDailyStudyMinutes,
+  type DayActivity,
+} from '../aggregate';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -31,8 +38,11 @@ function fmtTime(iso: string | null): string {
   return iso ? format(new Date(iso), 'HH:mm') : '-';
 }
 
-function Dot({ className }: { className: string }) {
-  return <span className={cn('h-1.5 w-1.5 rounded-full', className)} />;
+/** 캘린더 셀용 짧은 순공시간 표기 */
+function fmtStudyShort(min: number): string {
+  if (min < 60) return `${min}분`;
+  const h = min / 60;
+  return `${h.toFixed(h >= 10 ? 0 : 1)}h`;
 }
 
 function SectionCard({
@@ -64,6 +74,8 @@ export function ActivityCalendar({ studentId }: Props) {
   const { data: penalties } = usePenaltyRecordsQuery(studentId);
   const { data: warnings } = useWarningRecordsQuery(studentId);
   const { data: naps } = useRecentNapsQuery(studentId);
+  const { data: extraLogs } = useAllExtraStudyQuery(studentId);
+  const { data: outings } = useAllOutingsQuery(studentId);
 
   const [month, setMonth] = useState<Date>(() => new Date());
   const [selectedKey, setSelectedKey] = useState<string>(() => dateKey(new Date()));
@@ -71,6 +83,11 @@ export function ActivityCalendar({ studentId }: Props) {
   const activityMap = useMemo(
     () => buildActivityMap(attendance ?? [], penalties ?? [], warnings ?? [], naps ?? []),
     [attendance, penalties, warnings, naps]
+  );
+
+  const studyMap = useMemo(
+    () => buildDailyStudyMinutes(attendance ?? [], extraLogs ?? [], outings ?? [], naps ?? []),
+    [attendance, extraLogs, outings, naps]
   );
 
   const days = useMemo(() => {
@@ -112,7 +129,7 @@ export function ActivityCalendar({ studentId }: Props) {
         ))}
       </div>
 
-      {/* 날짜 그리드 */}
+      {/* 날짜 그리드 (날짜 아래 순공시간 숫자) */}
       <div className="grid grid-cols-7 gap-1">
         {days.map((day) => {
           const key = dateKey(day);
@@ -121,68 +138,40 @@ export function ActivityCalendar({ studentId }: Props) {
           const isSelected = key === selectedKey;
           const isToday = isSameDay(day, new Date());
           const tone = act ? attendanceTone(act.attendance) : null;
+          const studyMin = studyMap.get(key) ?? 0;
 
           return (
             <button
               key={key}
               onClick={() => setSelectedKey(key)}
               className={cn(
-                'flex h-12 flex-col items-center justify-start rounded-md border py-1 transition-colors',
+                'flex h-14 flex-col items-center justify-start rounded-md border py-1 transition-colors',
                 isSelected ? 'border-brand-500 bg-brand-50' : 'border-transparent hover:bg-gray-50',
                 tone === 'absent' && !isSelected && 'bg-red-50',
                 !inMonth && 'opacity-40'
               )}
             >
-              <span
-                className={cn(
-                  'text-xs',
-                  isToday ? 'font-bold text-brand-600' : 'text-gray-700'
-                )}
-              >
+              <span className={cn('text-xs', isToday ? 'font-bold text-brand-600' : 'text-gray-700')}>
                 {format(day, 'd')}
               </span>
-              {act && (
-                <span className="mt-0.5 flex flex-wrap items-center justify-center gap-0.5">
-                  {tone && (
-                    <Dot
-                      className={cn(
-                        tone === 'absent' && 'bg-red-500',
-                        tone === 'late' && 'bg-amber-500',
-                        tone === 'present' && 'bg-emerald-500'
-                      )}
-                    />
-                  )}
-                  {act.penalties.length > 0 && <Dot className="bg-rose-600" />}
-                  {act.warnings.length > 0 && <Dot className="bg-orange-600" />}
-                  {act.naps.length > 0 && <Dot className="bg-purple-500" />}
+              {studyMin > 0 ? (
+                <span className="mt-1 text-[11px] font-semibold leading-none text-emerald-600">
+                  {fmtStudyShort(studyMin)}
                 </span>
+              ) : (
+                tone === 'absent' && (
+                  <span className="mt-1 text-[10px] font-medium leading-none text-red-400">결석</span>
+                )
               )}
             </button>
           );
         })}
       </div>
 
-      {/* 범례 */}
-      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500">
-        <span className="flex items-center gap-1">
-          <Dot className="bg-emerald-500" /> 출석
-        </span>
-        <span className="flex items-center gap-1">
-          <Dot className="bg-amber-500" /> 지각
-        </span>
-        <span className="flex items-center gap-1">
-          <Dot className="bg-red-500" /> 결석
-        </span>
-        <span className="flex items-center gap-1">
-          <Dot className="bg-rose-600" /> 벌점
-        </span>
-        <span className="flex items-center gap-1">
-          <Dot className="bg-orange-600" /> 경고
-        </span>
-        <span className="flex items-center gap-1">
-          <Dot className="bg-purple-500" /> 파워냅
-        </span>
-      </div>
+      {/* 안내 */}
+      <p className="mt-2 text-[11px] text-gray-400">
+        셀의 초록 숫자 = 그날 순공시간 · 날짜를 누르면 상세(출결·벌점·경고·파워냅)를 볼 수 있어요.
+      </p>
 
       {/* 선택한 날짜 상세 (카테고리별) */}
       <div className="mt-4 border-t border-gray-100 pt-3">

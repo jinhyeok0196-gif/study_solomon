@@ -1,12 +1,10 @@
 import { useMemo } from 'react';
-import { isSameMonth } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { usePeriods } from '@/hooks/usePeriods';
 import { useCurrentTime } from '@/hooks/useCurrentTime';
 import { useScheduleStatus } from '@/hooks/useScheduleStatus';
 import { useAttendanceRecordsQuery } from '@/features/attendance/hooks';
-import { computeAttendanceStats } from '@/features/attendance/stats';
 import { usePenaltyProfileQuery } from '@/features/penalty/hooks';
 import { computeRiskLevel } from '@/features/penalty/risk';
 import { useWeeklyScheduleQuery } from '@/features/schedule/hooks';
@@ -20,8 +18,10 @@ import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
 import { StudentStatusBadge } from '@/components/schedule/StudentStatusBadge';
 import { ExtraStudyCard } from '@/features/extra-study/components/ExtraStudyCard';
 import { ActivityCalendar } from '@/features/activity-calendar/components/ActivityCalendar';
-import { useOngoingOutingQuery } from '@/features/outing/hooks';
-import { useTodayNapQuery } from '@/features/powernap/hooks';
+import { buildDailyStudyMinutes } from '@/features/activity-calendar/aggregate';
+import { useOngoingOutingQuery, useAllOutingsQuery } from '@/features/outing/hooks';
+import { useTodayNapQuery, useRecentNapsQuery } from '@/features/powernap/hooks';
+import { useAllExtraStudyQuery } from '@/features/extra-study/hooks';
 
 const QUICK_LINKS = [
   { to: STUDENT_PATHS.outing, label: '외출' },
@@ -64,12 +64,19 @@ export default function DashboardPage() {
     [scheduleStatus.timeline, todayPeriodNumbers]
   );
 
+  const { data: extraLogs } = useAllExtraStudyQuery(studentId);
+  const { data: outingLogs } = useAllOutingsQuery(studentId);
+  const { data: napLogs } = useRecentNapsQuery(studentId);
+
   const allRecords = attendanceRecords ?? [];
-  const monthRecords = allRecords.filter((record) =>
-    isSameMonth(new Date(record.classDate), new Date())
-  );
-  const stats = computeAttendanceStats(allRecords, monthRecords);
   const risk = penaltyProfile ? computeRiskLevel(penaltyProfile.currentPenaltyPoints) : null;
+
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const studyMap = useMemo(
+    () => buildDailyStudyMinutes(allRecords, extraLogs ?? [], outingLogs ?? [], napLogs ?? []),
+    [allRecords, extraLogs, outingLogs, napLogs]
+  );
+  const todayStudyMinutes = studyMap.get(todayKey) ?? 0;
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -95,8 +102,10 @@ export default function DashboardPage() {
       {/* 통계 */}
       <div className="grid grid-cols-2 gap-3">
         <Card>
-          <p className="text-xs text-gray-500">이번달 출석률</p>
-          <p className="text-2xl font-bold text-gray-900">{Math.round(stats.attendanceRate * 100)}%</p>
+          <p className="text-xs text-gray-500">오늘 순공시간</p>
+          <p className="text-2xl font-bold text-gray-900">
+            {Math.floor(todayStudyMinutes / 60)}시간 {todayStudyMinutes % 60}분
+          </p>
         </Card>
         <Card>
           <p className="text-xs text-gray-500">현재 벌점</p>
