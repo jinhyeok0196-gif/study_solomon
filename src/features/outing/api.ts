@@ -25,8 +25,10 @@ export async function fetchRecentOutings(studentId: string, limit = 10): Promise
   return data ?? [];
 }
 
-export async function startOuting(studentId: string): Promise<void> {
-  const { error } = await supabase.from('bathroom_logs').insert({ student_id: studentId });
+export async function startOuting(studentId: string, reason?: string): Promise<void> {
+  const { error } = await supabase
+    .from('bathroom_logs')
+    .insert({ student_id: studentId, reason: reason?.trim() || null });
   if (error) throw error;
 }
 

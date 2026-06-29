@@ -1,5 +1,7 @@
 import { useRef, useEffect } from 'react';
 import type { ScheduleSlotStatus } from '@/hooks/useScheduleStatus';
+import type { ActivityBadge } from './activityBadges';
+import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/lib/utils';
 
 function fmtTime(minutes: number): string {
@@ -8,9 +10,11 @@ function fmtTime(minutes: number): string {
 
 interface Props {
   timeline: ScheduleSlotStatus[];
+  /** 슬롯 id별 외출/파워냅 뱃지 (오늘 일정에서 교시 우측에 표시) */
+  badgesBySlot?: Map<string, ActivityBadge[]>;
 }
 
-export function ScheduleTimeline({ timeline }: Props) {
+export function ScheduleTimeline({ timeline, badgesBySlot }: Props) {
   const currentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -64,6 +68,11 @@ export function ScheduleTimeline({ timeline }: Props) {
                       쉬는시간
                     </span>
                   )}
+                  {(badgesBySlot?.get(slot.id) ?? []).map((b, i) => (
+                    <Badge key={i} tone={b.kind === 'outing' ? 'warning' : 'default'}>
+                      {b.label}
+                    </Badge>
+                  ))}
                 </div>
                 <div className="flex-shrink-0 text-right">
                   <span

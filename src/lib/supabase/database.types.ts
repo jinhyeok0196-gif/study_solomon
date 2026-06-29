@@ -248,6 +248,7 @@ export type Database = {
           created_at: string
           ended_at: string | null
           id: string
+          reason: string | null
           started_at: string
           status: string
           student_id: string
@@ -256,6 +257,7 @@ export type Database = {
           created_at?: string
           ended_at?: string | null
           id?: string
+          reason?: string | null
           started_at?: string
           status?: string
           student_id: string
@@ -264,6 +266,7 @@ export type Database = {
           created_at?: string
           ended_at?: string | null
           id?: string
+          reason?: string | null
           started_at?: string
           status?: string
           student_id?: string
@@ -535,6 +538,7 @@ export type Database = {
           is_unauthorized: boolean
           nap_date: string
           planned_end_at: string
+          reason: string | null
           started_at: string
           status: string
           student_id: string
@@ -546,6 +550,7 @@ export type Database = {
           is_unauthorized?: boolean
           nap_date?: string
           planned_end_at: string
+          reason?: string | null
           started_at?: string
           status?: string
           student_id: string
@@ -557,6 +562,7 @@ export type Database = {
           is_unauthorized?: boolean
           nap_date?: string
           planned_end_at?: string
+          reason?: string | null
           started_at?: string
           status?: string
           student_id?: string

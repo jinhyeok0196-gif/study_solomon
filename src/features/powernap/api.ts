@@ -29,12 +29,17 @@ export async function fetchRecentNaps(studentId: string, limit = 200): Promise<T
   return data ?? [];
 }
 
-export async function startNap(studentId: string, maxMinutes: number): Promise<void> {
+export async function startNap(
+  studentId: string,
+  maxMinutes: number,
+  reason?: string
+): Promise<void> {
   const plannedEndAt = new Date(Date.now() + maxMinutes * 60 * 1000).toISOString();
   const { error } = await supabase.from('power_nap_logs').insert({
     student_id: studentId,
     nap_date: todayDateString(),
     planned_end_at: plannedEndAt,
+    reason: reason?.trim() || null,
   });
   if (error) throw error;
 }

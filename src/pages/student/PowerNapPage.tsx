@@ -1,14 +1,16 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNow } from '@/hooks/useNow';
 import { useSystemSetting } from '@/hooks/useSystemSetting';
 import { useNapMutations, useTodayNapQuery } from '@/features/powernap/hooks';
 import { POWER_NAP_MAX_MINUTES } from '@/constants/penaltyRules';
+import { NAP_REASONS } from '@/constants/reasons';
 import { formatRemaining } from '@/lib/time';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
+import { ReasonSelectModal } from '@/components/ReasonSelectModal';
 
 export default function PowerNapPage() {
   const { user } = useAuth();
@@ -18,6 +20,7 @@ export default function PowerNapPage() {
   const { data: maxMinutes } = useSystemSetting('power_nap_max_minutes', POWER_NAP_MAX_MINUTES);
   const { data: nap, isLoading } = useTodayNapQuery(studentId);
   const { start, end } = useNapMutations(studentId);
+  const [reasonOpen, setReasonOpen] = useState(false);
 
   const autoEndTriggered = useRef(false);
 
@@ -46,7 +49,7 @@ export default function PowerNapPage() {
         {isLoading ? (
           <Spinner />
         ) : !nap ? (
-          <Button disabled={start.isPending} onClick={() => start.mutate(maxMinutes ?? POWER_NAP_MAX_MINUTES)}>
+          <Button disabled={start.isPending} onClick={() => setReasonOpen(true)}>
             파워냅 시작
           </Button>
         ) : nap.status === 'ongoing' ? (
@@ -54,6 +57,7 @@ export default function PowerNapPage() {
             <Badge tone="warning">파워냅 진행중</Badge>
             <p className="text-3xl font-bold text-gray-900">{formatRemaining(nap.planned_end_at, now)}</p>
             <p className="text-xs text-gray-500">남은 시간</p>
+            {nap.reason && <p className="text-xs text-gray-500">사유: {nap.reason}</p>}
             <Button variant="danger" disabled={end.isPending} onClick={() => end.mutate(nap.id)}>
               종료
             </Button>
@@ -67,6 +71,21 @@ export default function PowerNapPage() {
       </Card>
 
       <p className="text-xs text-red-600">파워냅 중 휴대폰 사용은 벌점 대상입니다. 무단 이용 시에도 벌점이 부과됩니다.</p>
+
+      <ReasonSelectModal
+        open={reasonOpen}
+        title="파워냅 사유를 선택해주세요"
+        reasons={NAP_REASONS}
+        confirmLabel="파워냅 시작"
+        isPending={start.isPending}
+        onConfirm={(reason) =>
+          start.mutate(
+            { maxMinutes: maxMinutes ?? POWER_NAP_MAX_MINUTES, reason },
+            { onSuccess: () => setReasonOpen(false) }
+          )
+        }
+        onClose={() => setReasonOpen(false)}
+      />
     </div>
   );
 }

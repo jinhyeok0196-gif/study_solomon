@@ -21,7 +21,8 @@ export function useNapMutations(studentId: string) {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['power-nap-today', studentId] });
 
   const start = useMutation({
-    mutationFn: (maxMinutes: number) => startNap(studentId, maxMinutes),
+    mutationFn: ({ maxMinutes, reason }: { maxMinutes: number; reason?: string }) =>
+      startNap(studentId, maxMinutes, reason),
     onSuccess: invalidate,
   });
 

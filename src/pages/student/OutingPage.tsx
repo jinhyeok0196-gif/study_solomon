@@ -1,12 +1,15 @@
+import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNow } from '@/hooks/useNow';
 import { useOngoingOutingQuery, useOutingMutations, useRecentOutingsQuery } from '@/features/outing/hooks';
+import { OUTING_REASONS } from '@/constants/reasons';
 import { formatElapsed } from '@/lib/time';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ReasonSelectModal } from '@/components/ReasonSelectModal';
 
 export default function OutingPage() {
   const { user } = useAuth();
@@ -16,6 +19,7 @@ export default function OutingPage() {
   const { data: ongoing, isLoading } = useOngoingOutingQuery(studentId);
   const { data: history } = useRecentOutingsQuery(studentId);
   const { start, end } = useOutingMutations(studentId);
+  const [reasonOpen, setReasonOpen] = useState(false);
 
   return (
     <div className="flex flex-col gap-6 p-4">
@@ -33,12 +37,13 @@ export default function OutingPage() {
           <>
             <Badge tone="warning">외출 중</Badge>
             <p className="text-3xl font-bold text-gray-900">{formatElapsed(ongoing.started_at, now)}</p>
+            {ongoing.reason && <p className="text-xs text-gray-500">사유: {ongoing.reason}</p>}
             <Button variant="danger" disabled={end.isPending} onClick={() => end.mutate(ongoing.id)}>
               복귀
             </Button>
           </>
         ) : (
-          <Button disabled={start.isPending} onClick={() => start.mutate()}>
+          <Button disabled={start.isPending} onClick={() => setReasonOpen(true)}>
             외출 시작
           </Button>
         )}
@@ -55,7 +60,10 @@ export default function OutingPage() {
                 key={log.id}
                 className="flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 text-sm"
               >
-                <span>{new Date(log.started_at).toLocaleString('ko-KR')}</span>
+                <span className="flex flex-col">
+                  <span>{new Date(log.started_at).toLocaleString('ko-KR')}</span>
+                  {log.reason && <span className="text-xs text-gray-400">{log.reason}</span>}
+                </span>
                 <Badge tone={log.status === 'ongoing' ? 'warning' : 'default'}>
                   {log.status === 'ongoing' ? '진행중' : log.status === 'overdue' ? '지연' : '완료'}
                 </Badge>
@@ -64,6 +72,16 @@ export default function OutingPage() {
           </ul>
         )}
       </div>
+
+      <ReasonSelectModal
+        open={reasonOpen}
+        title="외출 사유를 선택해주세요"
+        reasons={OUTING_REASONS}
+        confirmLabel="외출 시작"
+        isPending={start.isPending}
+        onConfirm={(reason) => start.mutate(reason, { onSuccess: () => setReasonOpen(false) })}
+        onClose={() => setReasonOpen(false)}
+      />
     </div>
   );
 }

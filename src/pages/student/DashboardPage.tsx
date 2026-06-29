@@ -20,6 +20,7 @@ import { ExtraStudyCard } from '@/features/extra-study/components/ExtraStudyCard
 import { ActivityCalendar } from '@/features/activity-calendar/components/ActivityCalendar';
 import { toLocalDateKey } from '@/features/activity-calendar/aggregate';
 import { studySecondsForDay } from '@/features/attendance/stats';
+import { periodActivityBadges, type ActivityBadge } from '@/components/schedule/activityBadges';
 import { useOngoingOutingQuery, useAllOutingsQuery } from '@/features/outing/hooks';
 import { useTodayNapQuery, useRecentNapsQuery } from '@/features/powernap/hooks';
 import { useAllExtraStudyQuery } from '@/features/extra-study/hooks';
@@ -94,6 +95,36 @@ export default function DashboardPage() {
   const studyM = Math.floor((todayStudySeconds % 3600) / 60);
   const studyS = todayStudySeconds % 60;
 
+  // 오늘 일정 각 교시에 겹치는 외출/파워냅 뱃지 (now 의존 → 진행 중이면 매초 갱신)
+  const badgesBySlot = useMemo(() => {
+    const base = new Date(now);
+    base.setHours(0, 0, 0, 0);
+    const baseMs = base.getTime();
+    const nowMs = now.getTime();
+    const outings = (outingLogs ?? []).map((o) => ({
+      startedAt: o.started_at,
+      endedAt: o.ended_at,
+      reason: o.reason,
+    }));
+    const naps = (napLogs ?? []).map((n) => ({
+      startedAt: n.started_at,
+      endedAt: n.ended_at,
+      reason: n.reason,
+    }));
+    const map = new Map<string, ActivityBadge[]>();
+    for (const slot of todayTimeline) {
+      const badges = periodActivityBadges(
+        baseMs + slot.startMinutes * 60000,
+        baseMs + slot.endMinutes * 60000,
+        outings,
+        naps,
+        nowMs
+      );
+      if (badges.length) map.set(slot.id, badges);
+    }
+    return map;
+  }, [todayTimeline, outingLogs, napLogs, now]);
+
   return (
     <div className="flex flex-col gap-4 p-4">
       {/* 인사 + 현재 상태 */}
@@ -134,15 +165,30 @@ export default function DashboardPage() {
 
       {/* 빠른 링크 */}
       <div className="grid grid-cols-4 gap-2">
-        {QUICK_LINKS.map((link) => (
-          <Link
-            key={link.to}
-            to={link.to}
-            className="flex items-center justify-center rounded-md border border-gray-200 bg-white py-3 text-xs font-medium text-gray-700 hover:border-brand-300"
-          >
-            {link.label}
-          </Link>
-        ))}
+        {QUICK_LINKS.map((link) => {
+          // 오늘 파워냅을 이미 사용 완료했으면 '사용완료'로 비활성화
+          const napDone = link.to === STUDENT_PATHS.powerNap && todayNap?.status === 'completed';
+          if (napDone) {
+            return (
+              <div
+                key={link.to}
+                aria-disabled="true"
+                className="flex cursor-not-allowed items-center justify-center rounded-md border border-gray-200 bg-gray-100 py-3 text-xs font-medium text-gray-400"
+              >
+                사용완료
+              </div>
+            );
+          }
+          return (
+            <Link
+              key={link.to}
+              to={link.to}
+              className="flex items-center justify-center rounded-md border border-gray-200 bg-white py-3 text-xs font-medium text-gray-700 hover:border-brand-300"
+            >
+              {link.label}
+            </Link>
+          );
+        })}
       </div>
 
       {/* 오늘 일정 타임라인 (본인이 신청한 교시만) */}
@@ -154,7 +200,7 @@ export default function DashboardPage() {
             description="시간표에서 오늘 공부할 교시를 신청해보세요."
           />
         ) : (
-          <ScheduleTimeline timeline={todayTimeline} />
+          <ScheduleTimeline timeline={todayTimeline} badgesBySlot={badgesBySlot} />
         )}
       </div>
 

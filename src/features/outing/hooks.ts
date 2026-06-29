@@ -31,7 +31,7 @@ export function useOutingMutations(studentId: string) {
   };
 
   const start = useMutation({
-    mutationFn: () => startOuting(studentId),
+    mutationFn: (reason?: string) => startOuting(studentId, reason),
     onSuccess: invalidate,
   });
 
