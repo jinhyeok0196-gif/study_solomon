@@ -19,7 +19,7 @@ import { StudentStatusBadge } from '@/components/schedule/StudentStatusBadge';
 import { ExtraStudyCard } from '@/features/extra-study/components/ExtraStudyCard';
 import { ActivityCalendar } from '@/features/activity-calendar/components/ActivityCalendar';
 import { toLocalDateKey } from '@/features/activity-calendar/aggregate';
-import { liveStudySeconds } from '@/features/attendance/stats';
+import { studySecondsForDay } from '@/features/attendance/stats';
 import { useOngoingOutingQuery, useAllOutingsQuery } from '@/features/outing/hooks';
 import { useTodayNapQuery, useRecentNapsQuery } from '@/features/powernap/hooks';
 import { useAllExtraStudyQuery } from '@/features/extra-study/hooks';
@@ -87,7 +87,7 @@ export default function DashboardPage() {
         .filter((n) => n.nap_date === todayKey)
         .map((n) => ({ startedAt: n.started_at, endedAt: n.ended_at })),
     ];
-    return liveStudySeconds(todayRecords, todayExtra, todayAway, now.getTime());
+    return studySecondsForDay(todayRecords, todayExtra, todayAway, now.getTime());
   }, [allRecords, extraLogs, outingLogs, napLogs, todayKey, now]);
 
   const studyH = Math.floor(todayStudySeconds / 3600);

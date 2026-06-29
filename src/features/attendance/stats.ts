@@ -64,37 +64,87 @@ export function awayDeductionMinutes(
   return Math.round(total);
 }
 
-// ── 실시간(초 단위) 순공시간 ──────────────────────────────────────────────
-// 오늘처럼 "진행 중인" 날에 사용. 진행 중인 교시는 교시 전체가 아니라 '지금까지
-// 경과한 시간'만 세고, 그 구간과 겹치는 외출/파워냅(진행 중이면 현재 시각까지)을
-// 차감한다. 교시외공부도 진행 중이면 현재 시각까지 더한다. → 교시 중간에 확인해도
-// '지금 이 순간'의 진짜 순공시간이 초 단위로 나온다.
+// ── 재실시간 기반 순공시간(초 단위) ───────────────────────────────────────
+// 순공시간 = (등원~하원/현재 '재실 구간' ∩ 신청한 수업 교시) − 교시 중 외출/파워냅
+//            + 교시외공부.
+//
+// 왜 교시별 출석(present) 레코드가 아니라 '재실 구간'을 쓰나:
+//   QR 등원은 그날 '첫 교시'에만 present 레코드를 만들고(checkin_by_qr), 중간 교시는
+//   레코드가 없거나 크론이 absent로 찍는다. 따라서 present 교시만 세면 첫 교시 뒤로
+//   순공시간이 멈춘다. 대신 checked_in_at(등원)~checked_out_at(하원, 없으면 현재)을
+//   '실제 자리에 있던 구간'으로 보고, 그날 신청한 수업 교시와 겹치는 시간을 센다.
+//   → 교시 도중에 확인해도, 첫 교시 이후에도 매초 올라가고, 비수업 시간(쉬는시간/식사)
+//     이나 외출/파워냅 중에는 올라가지 않는다.
+//
+// TODO(추후): 교시 시작 후 5분 / 종료 전 5분에 카메라+AI로 재실 여부를 판정해
+//   '실제 재실 교시'를 확정하고 무단결석을 가려낼 예정. 그때는 attendedClassIntervals를
+//   AI 재실 판정 결과로 교체/보강한다. (현재는 카메라/AI 미연동)
 export interface LiveStudyLog {
   startedAt: string;
   endedAt: string | null;
 }
 
-export function liveStudySeconds(
+export interface PresenceSpan {
+  start: number; // 등원(checked_in_at) epoch ms
+  end: number | null; // 하원(checked_out_at) epoch ms, 아직 재실 중이면 null
+}
+
+/** 그날 출결 레코드들에서 재실 구간(등원~하원)을 도출한다. 등원 기록이 없으면 null. */
+export function presenceSpanFromRecords(records: AttendanceRecordWithPeriod[]): PresenceSpan | null {
+  let start = Infinity;
+  let end = -Infinity;
+  let hasOut = false;
+  for (const r of records) {
+    if (r.checkedInAt) {
+      const t = new Date(r.checkedInAt).getTime();
+      if (Number.isFinite(t) && t < start) start = t;
+    }
+    if (r.checkedOutAt) {
+      const t = new Date(r.checkedOutAt).getTime();
+      if (Number.isFinite(t) && t > end) {
+        end = t;
+        hasOut = true;
+      }
+    }
+  }
+  if (!Number.isFinite(start)) return null;
+  return { start, end: hasOut ? end : null };
+}
+
+/** 재실 구간 ∩ 신청한 수업 교시 = 실제로 공부한 구간들. (status 무관, 등원했으면 인정) */
+export function attendedClassIntervals(
+  records: AttendanceRecordWithPeriod[],
+  nowMs: number
+): StudyInterval[] {
+  const span = presenceSpanFromRecords(records);
+  if (!span) return [];
+  const spanEnd = span.end ?? nowMs;
+  if (spanEnd <= span.start) return [];
+  const intervals: StudyInterval[] = [];
+  for (const r of records) {
+    const ps = new Date(`${r.classDate}T${r.periodStartTime}`).getTime();
+    const pe = new Date(`${r.classDate}T${r.periodEndTime}`).getTime();
+    if (!Number.isFinite(ps) || !Number.isFinite(pe) || pe <= ps) continue;
+    const s = Math.max(span.start, ps);
+    const e = Math.min(spanEnd, pe);
+    if (e > s) intervals.push({ start: s, end: e });
+  }
+  return intervals;
+}
+
+/** 하루치 순공시간(초). 오늘이면 nowMs로 매초 증가, 과거면 확정값. */
+export function studySecondsForDay(
   records: AttendanceRecordWithPeriod[],
   extraLogs: LiveStudyLog[],
   awayLogs: AwayLog[],
   nowMs: number
 ): number {
-  // 출석(present/late) 교시의 '경과 구간' [start, min(end, now)] — 아직 안 끝난 교시는 현재까지만.
-  const intervals: StudyInterval[] = [];
-  for (const r of records) {
-    if (!STUDY_STATUSES.has(r.status)) continue;
-    const start = new Date(`${r.classDate}T${r.periodStartTime}`).getTime();
-    const end = new Date(`${r.classDate}T${r.periodEndTime}`).getTime();
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
-    const clampedEnd = Math.min(end, nowMs);
-    if (clampedEnd > start) intervals.push({ start, end: clampedEnd });
-  }
+  const intervals = attendedClassIntervals(records, nowMs);
 
   let seconds = 0;
   for (const iv of intervals) seconds += (iv.end - iv.start) / 1000;
 
-  // 교시 중 외출/파워냅 차감 (진행 중이면 현재 시각까지)
+  // 교시(재실) 중 외출/파워냅 차감 (진행 중이면 현재 시각까지)
   for (const log of awayLogs) {
     const ls = new Date(log.startedAt).getTime();
     const le = log.endedAt ? new Date(log.endedAt).getTime() : nowMs;

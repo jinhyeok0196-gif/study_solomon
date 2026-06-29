@@ -8,13 +8,12 @@ import {
   attendedIntervalsFromRecords,
   awayDeductionMinutes,
   computeAttendanceStats,
-  liveStudySeconds,
 } from '@/features/attendance/stats';
 import { useAllExtraStudyQuery } from '@/features/extra-study/hooks';
 import { sumExtraStudyMinutes } from '@/features/extra-study/api';
 import { useAllOutingsQuery } from '@/features/outing/hooks';
 import { useRecentNapsQuery } from '@/features/powernap/hooks';
-import { buildDailyStudyMinutes, toLocalDateKey } from '@/features/activity-calendar/aggregate';
+import { buildDailyStudySeconds, toLocalDateKey } from '@/features/activity-calendar/aggregate';
 import { cn } from '@/lib/utils';
 import { usePenaltyRecordsQuery } from '@/features/penalty/hooks';
 import { computeRiskLevel } from '@/features/penalty/risk';
@@ -92,46 +91,28 @@ export default function MyPage() {
   );
   const riskLevel = profile ? computeRiskLevel(profile.currentPenaltyPoints) : null;
 
-  // 순공시간: 일/주간/월간/누적 선택. 모두 초 단위, 오늘은 매초 실시간 반영.
+  // 순공시간: 일/주간/월간/누적 선택. 모두 초 단위, 오늘분은 매초 실시간 반영.
   const [studyRange, setStudyRange] = useState<'day' | 'week' | 'month' | 'all'>('day');
-  // 과거 날짜는 확정값(분 단위), 오늘은 아래에서 실시간 초 단위로 덮어쓴다.
-  const studyMap = useMemo(
-    () => buildDailyStudyMinutes(allRecords, extraStudyLogs ?? [], outingLogs ?? [], napLogs ?? []),
-    [allRecords, extraStudyLogs, outingLogs, napLogs]
+  // 날짜별 순공시간(초) 맵 — 오늘은 now 기준 실시간, 과거는 확정값.
+  const studySecMap = useMemo(
+    () => buildDailyStudySeconds(allRecords, extraStudyLogs ?? [], outingLogs ?? [], napLogs ?? [], now.getTime()),
+    [allRecords, extraStudyLogs, outingLogs, napLogs, now]
   );
-  // 합계는 초 단위로 누적한다. (오늘분은 liveStudySeconds로 실시간 계산)
   const studyTotals = useMemo(() => {
     const todayKey = toLocalDateKey(now.toISOString());
-
-    const todayRecords = allRecords.filter((r) => r.classDate === todayKey);
-    const todayExtra = (extraStudyLogs ?? [])
-      .filter((e) => e.study_date === todayKey)
-      .map((e) => ({ startedAt: e.started_at, endedAt: e.ended_at }));
-    const todayAway = [
-      ...(outingLogs ?? [])
-        .filter((o) => toLocalDateKey(o.started_at) === todayKey)
-        .map((o) => ({ startedAt: o.started_at, endedAt: o.ended_at })),
-      ...(napLogs ?? [])
-        .filter((n) => n.nap_date === todayKey)
-        .map((n) => ({ startedAt: n.started_at, endedAt: n.ended_at })),
-    ];
-    const todaySeconds = liveStudySeconds(todayRecords, todayExtra, todayAway, now.getTime());
-
-    // 오늘은 항상 현재 주·월·누적에 포함된다.
-    let day = todaySeconds,
-      week = todaySeconds,
-      month = todaySeconds,
-      all = todaySeconds;
-    for (const [k, vMin] of studyMap) {
-      if (k === todayKey) continue; // 오늘분은 실시간 초로 이미 합산
-      const vSec = vMin * 60;
+    let day = 0,
+      week = 0,
+      month = 0,
+      all = 0;
+    for (const [k, sec] of studySecMap) {
       const d = new Date(`${k}T00:00:00`);
-      all += vSec;
-      if (isSameWeek(d, now, { weekStartsOn: 1 })) week += vSec;
-      if (isSameMonth(d, now)) month += vSec;
+      all += sec;
+      if (k === todayKey) day += sec;
+      if (isSameWeek(d, now, { weekStartsOn: 1 })) week += sec;
+      if (isSameMonth(d, now)) month += sec;
     }
     return { day, week, month, all };
-  }, [studyMap, allRecords, extraStudyLogs, outingLogs, napLogs, now]);
+  }, [studySecMap, now]);
 
   const rangeSeconds = studyTotals[studyRange];
   const rangeH = Math.floor(rangeSeconds / 3600);

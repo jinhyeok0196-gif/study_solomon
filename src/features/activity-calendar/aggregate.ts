@@ -1,9 +1,9 @@
 import type { AttendanceRecordWithPeriod } from '@/features/attendance/api';
 import type { Tables } from '@/lib/supabase/database.types';
 import {
-  attendedIntervalsFromRecords,
-  awayDeductionMinutes,
-  recordStudyMinutes,
+  studySecondsForDay,
+  type AwayLog,
+  type LiveStudyLog,
 } from '@/features/attendance/stats';
 
 export interface DayActivity {
@@ -46,21 +46,17 @@ export function buildActivityMap(
   return map;
 }
 
-function logMinutes(start: string, end: string | null): number {
-  const s = new Date(start).getTime();
-  const e = end ? new Date(end).getTime() : Date.now();
-  return Math.max(0, Math.round((e - s) / 60000));
-}
-
 /**
- * 날짜(YYYY-MM-DD)별 순공시간(분) 맵.
- * = 출석 교시 시간 + 교시외공부 − (교시 중 외출/파워냅), 0 미만 방지.
+ * 날짜(YYYY-MM-DD)별 순공시간(초) 맵.
+ * = (재실 구간 ∩ 신청 수업 교시) − (교시 중 외출/파워냅) + 교시외공부.
+ * 오늘분은 nowMs 기준으로 실시간 증가하고, 과거분은 하원 시각까지의 확정값이다.
  */
-export function buildDailyStudyMinutes(
+export function buildDailyStudySeconds(
   attendance: AttendanceRecordWithPeriod[],
   extraLogs: Tables<'extra_study_logs'>[],
   outings: Tables<'bathroom_logs'>[],
-  naps: Tables<'power_nap_logs'>[]
+  naps: Tables<'power_nap_logs'>[],
+  nowMs: number
 ): Map<string, number> {
   const attendanceByDay = new Map<string, AttendanceRecordWithPeriod[]>();
   attendance.forEach((a) => {
@@ -69,13 +65,15 @@ export function buildDailyStudyMinutes(
     attendanceByDay.set(a.classDate, list);
   });
 
-  const extraByDay = new Map<string, number>();
+  const extraByDay = new Map<string, LiveStudyLog[]>();
   extraLogs.forEach((e) => {
-    extraByDay.set(e.study_date, (extraByDay.get(e.study_date) ?? 0) + logMinutes(e.started_at, e.ended_at));
+    const list = extraByDay.get(e.study_date) ?? [];
+    list.push({ startedAt: e.started_at, endedAt: e.ended_at });
+    extraByDay.set(e.study_date, list);
   });
 
-  const awayByDay = new Map<string, { startedAt: string; endedAt: string | null }[]>();
-  const pushAway = (day: string, log: { startedAt: string; endedAt: string | null }) => {
+  const awayByDay = new Map<string, AwayLog[]>();
+  const pushAway = (day: string, log: AwayLog) => {
     const list = awayByDay.get(day) ?? [];
     list.push(log);
     awayByDay.set(day, list);
@@ -86,13 +84,28 @@ export function buildDailyStudyMinutes(
   const result = new Map<string, number>();
   const days = new Set<string>([...attendanceByDay.keys(), ...extraByDay.keys()]);
   for (const day of days) {
-    const recs = attendanceByDay.get(day) ?? [];
-    const periodMin = recs.reduce((sum, r) => sum + recordStudyMinutes(r), 0);
-    const extraMin = extraByDay.get(day) ?? 0;
-    const away = awayDeductionMinutes(attendedIntervalsFromRecords(recs), awayByDay.get(day) ?? []);
-    const total = Math.max(0, periodMin + extraMin - away);
-    if (total > 0) result.set(day, total);
+    const sec = studySecondsForDay(
+      attendanceByDay.get(day) ?? [],
+      extraByDay.get(day) ?? [],
+      awayByDay.get(day) ?? [],
+      nowMs
+    );
+    if (sec > 0) result.set(day, sec);
   }
+  return result;
+}
+
+/** 날짜별 순공시간(분) 맵 — 캘린더 셀 표기용. buildDailyStudySeconds의 분 환산 래퍼. */
+export function buildDailyStudyMinutes(
+  attendance: AttendanceRecordWithPeriod[],
+  extraLogs: Tables<'extra_study_logs'>[],
+  outings: Tables<'bathroom_logs'>[],
+  naps: Tables<'power_nap_logs'>[],
+  nowMs: number = Date.now()
+): Map<string, number> {
+  const seconds = buildDailyStudySeconds(attendance, extraLogs, outings, naps, nowMs);
+  const result = new Map<string, number>();
+  for (const [day, sec] of seconds) result.set(day, Math.round(sec / 60));
   return result;
 }
 

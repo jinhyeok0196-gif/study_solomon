@@ -3,7 +3,7 @@ import {
   attendedIntervalsFromRecords,
   awayDeductionMinutes,
   computeAttendanceStats,
-  liveStudySeconds,
+  studySecondsForDay,
   recordStudyMinutes,
 } from './stats';
 import type { AttendanceRecordWithPeriod } from './api';
@@ -81,38 +81,52 @@ describe('computeAttendanceStats', () => {
   });
 });
 
-describe('liveStudySeconds', () => {
-  const present = makeRecord({
+describe('studySecondsForDay', () => {
+  const at = (h: number, m: number, s = 0) => new Date(2026, 5, 1, h, m, s).getTime();
+  const iso = (h: number, m: number) => new Date(2026, 5, 1, h, m).toISOString();
+  // 09:00 등원, 09:00~10:20 교시
+  const checkedIn = makeRecord({
     status: 'present',
     classDate: '2026-06-01',
     periodStartTime: '09:00:00',
     periodEndTime: '10:20:00',
-  });
-  const at = (h: number, m: number, s = 0) => new Date(2026, 5, 1, h, m, s).getTime();
-
-  it('counts only elapsed time of an in-progress period (not the full period)', () => {
-    // 교시 09:00~10:20 인데 09:30 시점 → 경과 30분 = 1800초
-    expect(liveStudySeconds([present], [], [], at(9, 30))).toBe(1800);
+    checkedInAt: iso(9, 0),
   });
 
-  it('counts the full period once it has ended', () => {
-    expect(liveStudySeconds([present], [], [], at(11, 0))).toBe(80 * 60);
+  it('counts elapsed presence within the in-progress period (live)', () => {
+    // 09:00 등원, 09:30 시점 → 재실 ∩ 교시 = 30분 = 1800초
+    expect(studySecondsForDay([checkedIn], [], [], at(9, 30))).toBe(1800);
   });
 
-  it('freezes while an ongoing outing overlaps the current period', () => {
-    // 09:00 출석, 09:20부터 외출(진행 중), 현재 09:50 → 0~20분(1200초)만 인정
-    const away = [{ startedAt: new Date(2026, 5, 1, 9, 20).toISOString(), endedAt: null }];
-    expect(liveStudySeconds([present], [], away, at(9, 50))).toBe(20 * 60);
+  it('keeps counting later periods after the first ends (presence-based, status 무관)', () => {
+    // 1교시 09:00~10:00 (present, 등원기록), 2교시 10:10~11:10 (크론이 absent로 찍어도 인정)
+    const p1 = makeRecord({ periodNumber: 1, status: 'present', periodStartTime: '09:00:00', periodEndTime: '10:00:00', checkedInAt: iso(9, 0) });
+    const p2 = makeRecord({ periodNumber: 2, status: 'absent', periodStartTime: '10:10:00', periodEndTime: '11:10:00' });
+    // 10:30 시점 → 1교시 60분(3600) + 2교시 10:10~10:30 20분(1200) = 4800
+    expect(studySecondsForDay([p1, p2], [], [], at(10, 30))).toBe(4800);
+  });
+
+  it('freezes while an ongoing outing overlaps the period', () => {
+    // 09:20부터 외출(진행 중), 현재 09:50 → 09:00~09:20 20분만 인정 = 1200초
+    const away = [{ startedAt: iso(9, 20), endedAt: null }];
+    expect(studySecondsForDay([checkedIn], [], away, at(9, 50))).toBe(20 * 60);
+  });
+
+  it('stops at checkout time', () => {
+    // 09:00 등원, 09:40 하원 → 11:00에 봐도 40분(2400초)에서 확정
+    const rec = makeRecord({ status: 'present', periodStartTime: '09:00:00', periodEndTime: '10:20:00', checkedInAt: iso(9, 0), checkedOutAt: iso(9, 40) });
+    expect(studySecondsForDay([rec], [], [], at(11, 0))).toBe(40 * 60);
   });
 
   it('adds ongoing extra study time up to now', () => {
-    const extra = [{ startedAt: new Date(2026, 5, 1, 13, 0).toISOString(), endedAt: null }];
+    const extra = [{ startedAt: iso(13, 0), endedAt: null }];
     // 교시 종료(80분=4800) + 진행 중 교시외공부 10분(600) = 5400초
-    expect(liveStudySeconds([present], extra, [], at(13, 10))).toBe(5400);
+    expect(studySecondsForDay([checkedIn], extra, [], at(13, 10))).toBe(5400);
   });
 
-  it('returns 0 before the period starts', () => {
-    expect(liveStudySeconds([present], [], [], at(8, 0))).toBe(0);
+  it('returns 0 when the student never checked in (no presence)', () => {
+    const noCheckin = makeRecord({ status: 'present', periodStartTime: '09:00:00', periodEndTime: '10:20:00' });
+    expect(studySecondsForDay([noCheckin], [], [], at(9, 30))).toBe(0);
   });
 });
 
