@@ -8,12 +8,17 @@ import {
   attendedIntervalsFromRecords,
   awayDeductionMinutes,
   computeAttendanceStats,
+  liveStudySecondsFromSchedule,
+  presenceSpanFromRecords,
 } from '@/features/attendance/stats';
 import { useAllExtraStudyQuery } from '@/features/extra-study/hooks';
 import { sumExtraStudyMinutes } from '@/features/extra-study/api';
 import { useAllOutingsQuery } from '@/features/outing/hooks';
 import { useRecentNapsQuery } from '@/features/powernap/hooks';
 import { buildDailyStudySeconds, toLocalDateKey } from '@/features/activity-calendar/aggregate';
+import { usePeriods } from '@/hooks/usePeriods';
+import { useWeeklyScheduleQuery } from '@/features/schedule/hooks';
+import { getWeekStartDate, todayDayOfWeekKey } from '@/features/schedule/dates';
 import { cn } from '@/lib/utils';
 import { usePenaltyRecordsQuery } from '@/features/penalty/hooks';
 import { computeRiskLevel } from '@/features/penalty/risk';
@@ -74,7 +79,17 @@ export default function MyPage() {
   const { data: extraStudyLogs } = useAllExtraStudyQuery(studentId);
   const { data: outingLogs } = useAllOutingsQuery(studentId);
   const { data: napLogs } = useRecentNapsQuery(studentId);
+  const { data: periods } = usePeriods();
+  const { data: weekSchedule } = useWeeklyScheduleQuery(studentId, getWeekStartDate(0));
   const allRecords = attendanceRecords ?? [];
+
+  // 오늘 신청한 수업 교시 번호
+  const todayPeriodNumbers = useMemo(() => {
+    const dayKey = todayDayOfWeekKey();
+    return new Set<number>(
+      (weekSchedule?.cells ?? []).filter((c) => c.dayOfWeek === dayKey).map((c) => c.periodNumber)
+    );
+  }, [weekSchedule]);
   const monthRecords = allRecords.filter((r) => isSameMonth(new Date(r.classDate), new Date()));
   const awayDeduction = awayDeductionMinutes(
     attendedIntervalsFromRecords(allRecords),
@@ -100,19 +115,50 @@ export default function MyPage() {
   );
   const studyTotals = useMemo(() => {
     const todayKey = toLocalDateKey(now.toISOString());
-    let day = 0,
-      week = 0,
-      month = 0,
-      all = 0;
+
+    // 오늘은 시간표 기반 실시간 값으로 (진행 중 교시도 카운팅) — 대시보드와 동일
+    const todayRecords = allRecords.filter((r) => r.classDate === todayKey);
+    const presence = presenceSpanFromRecords(todayRecords);
+    const classIntervals = (periods ?? [])
+      .filter((p) => todayPeriodNumbers.has(p.period_number))
+      .map((p) => ({
+        start: new Date(`${todayKey}T${p.start_time}`).getTime(),
+        end: new Date(`${todayKey}T${p.end_time}`).getTime(),
+      }))
+      .filter((iv) => Number.isFinite(iv.start) && Number.isFinite(iv.end) && iv.end > iv.start);
+    const todayExtra = (extraStudyLogs ?? [])
+      .filter((e) => e.study_date === todayKey)
+      .map((e) => ({ startedAt: e.started_at, endedAt: e.ended_at }));
+    const todayAway = [
+      ...(outingLogs ?? [])
+        .filter((o) => toLocalDateKey(o.started_at) === todayKey)
+        .map((o) => ({ startedAt: o.started_at, endedAt: o.ended_at })),
+      ...(napLogs ?? [])
+        .filter((n) => n.nap_date === todayKey)
+        .map((n) => ({ startedAt: n.started_at, endedAt: n.ended_at })),
+    ];
+    const todaySeconds = liveStudySecondsFromSchedule(
+      classIntervals,
+      presence,
+      todayExtra,
+      todayAway,
+      now.getTime()
+    );
+
+    // 오늘은 항상 현재 주·월·누적에 포함된다.
+    let day = todaySeconds,
+      week = todaySeconds,
+      month = todaySeconds,
+      all = todaySeconds;
     for (const [k, sec] of studySecMap) {
+      if (k === todayKey) continue; // 오늘분은 실시간 값으로 이미 합산
       const d = new Date(`${k}T00:00:00`);
       all += sec;
-      if (k === todayKey) day += sec;
       if (isSameWeek(d, now, { weekStartsOn: 1 })) week += sec;
       if (isSameMonth(d, now)) month += sec;
     }
     return { day, week, month, all };
-  }, [studySecMap, now]);
+  }, [studySecMap, periods, todayPeriodNumbers, allRecords, extraStudyLogs, outingLogs, napLogs, now]);
 
   const rangeSeconds = studyTotals[studyRange];
   const rangeH = Math.floor(rangeSeconds / 3600);
