@@ -19,6 +19,7 @@ import { CurrentPeriodCard } from '@/components/schedule/CurrentPeriodCard';
 import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
 import { StudentStatusBadge } from '@/components/schedule/StudentStatusBadge';
 import { ExtraStudyCard } from '@/features/extra-study/components/ExtraStudyCard';
+import { ActivityCalendar } from '@/features/activity-calendar/components/ActivityCalendar';
 import { useOngoingOutingQuery } from '@/features/outing/hooks';
 import { useTodayNapQuery } from '@/features/powernap/hooks';
 
@@ -130,6 +131,12 @@ export default function DashboardPage() {
         ) : (
           <ScheduleTimeline timeline={todayTimeline} />
         )}
+      </div>
+
+      {/* 활동 캘린더 (출결·벌점·경고·파워냅 개요 + 날짜별 상세) */}
+      <div>
+        <p className="mb-3 text-sm font-semibold text-gray-700">활동 캘린더</p>
+        <ActivityCalendar studentId={studentId} />
       </div>
     </div>
   );

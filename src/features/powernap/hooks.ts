@@ -1,10 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { endNap, fetchTodayNap, startNap } from './api';
+import { endNap, fetchRecentNaps, fetchTodayNap, startNap } from './api';
 
 export function useTodayNapQuery(studentId: string) {
   return useQuery({
     queryKey: ['power-nap-today', studentId],
     queryFn: () => fetchTodayNap(studentId),
+  });
+}
+
+export function useRecentNapsQuery(studentId: string) {
+  return useQuery({
+    queryKey: ['power-nap-recent', studentId],
+    queryFn: () => fetchRecentNaps(studentId),
+    enabled: !!studentId,
   });
 }
 
