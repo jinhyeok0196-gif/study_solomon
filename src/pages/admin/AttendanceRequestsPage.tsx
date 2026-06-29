@@ -5,6 +5,7 @@ import {
   useReviewAttendanceRequestMutation,
 } from '@/features/admin-attendance-requests/hooks';
 import type { AttendanceRequestRow } from '@/features/admin-attendance-requests/api';
+import { useAdminOutingsQuery } from '@/features/admin-outings/hooks';
 import { REQUEST_KIND_LABEL, REQUEST_STATUS_LABEL } from '@/features/requests/types';
 import { usePeriods, formatPeriodNumbers } from '@/hooks/usePeriods';
 import { QuickPenaltyGrant } from '@/features/admin-penalty/components/QuickPenaltyGrant';
@@ -15,13 +16,30 @@ import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
 
-type Tab = 'all' | 'absence' | 'leave';
+type Tab = 'all' | 'absence' | 'leave' | 'outing';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'all', label: '전체' },
   { key: 'absence', label: '결석' },
   { key: 'leave', label: '조퇴' },
+  { key: 'outing', label: '외출' },
 ];
+
+const OUTING_STATUS: Record<string, { label: string; tone: 'warning' | 'danger' | 'default' }> = {
+  ongoing: { label: '진행중', tone: 'warning' },
+  overdue: { label: '지연', tone: 'danger' },
+  completed: { label: '완료', tone: 'default' },
+};
+
+function fmtDateTime(d: string) {
+  return new Date(d).toLocaleString('ko-KR');
+}
+
+function outingMinutes(startedAt: string, endedAt: string | null): number {
+  const s = new Date(startedAt).getTime();
+  const e = endedAt ? new Date(endedAt).getTime() : Date.now();
+  return Math.max(0, Math.round((e - s) / 60000));
+}
 
 const STATUS_TONE: Record<AttendanceRequestRow['status'], 'warning' | 'success' | 'danger'> = {
   pending: 'warning',
@@ -39,6 +57,7 @@ export default function AttendanceRequestsPage() {
   const adminId = user!.id;
 
   const { data: requests, isLoading } = useAttendanceRequestsQuery();
+  const { data: outings } = useAdminOutingsQuery();
   const { data: periods } = usePeriods();
   const review = useReviewAttendanceRequestMutation();
 
@@ -73,8 +92,8 @@ export default function AttendanceRequestsPage() {
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center gap-3">
-        <h2 className="text-xl font-semibold text-gray-900">결석·조퇴 신청 관리</h2>
-        {pendingCount > 0 && <Badge tone="warning">대기 {pendingCount}건</Badge>}
+        <h2 className="text-xl font-semibold text-gray-900">결석·조퇴·외출 관리</h2>
+        {tab !== 'outing' && pendingCount > 0 && <Badge tone="warning">대기 {pendingCount}건</Badge>}
       </div>
 
       {/* 탭 */}
@@ -92,8 +111,35 @@ export default function AttendanceRequestsPage() {
         ))}
       </div>
 
-      {/* 신청 목록 */}
-      {filtered.length === 0 ? (
+      {/* 목록 */}
+      {tab === 'outing' ? (
+        (outings ?? []).length === 0 ? (
+          <EmptyState title="외출 기록이 없습니다" />
+        ) : (
+          <div className="flex flex-col gap-3">
+            {(outings ?? []).map((o) => {
+              const st = OUTING_STATUS[o.status] ?? { label: o.status, tone: 'default' as const };
+              return (
+                <Card key={o.id}>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-900">{o.studentName}</span>
+                    <Badge tone={st.tone}>{st.label}</Badge>
+                  </div>
+                  <p className="mt-1 text-sm text-gray-600">
+                    시작: <span className="font-medium">{fmtDateTime(o.startedAt)}</span> · 시간:{' '}
+                    <span className="font-medium">{outingMinutes(o.startedAt, o.endedAt)}분</span>
+                    {!o.endedAt && ' (진행중)'}
+                  </p>
+                  {o.reason && <p className="mt-0.5 text-sm text-gray-500">사유: {o.reason}</p>}
+                  <div className="mt-3 border-t border-gray-100 pt-2">
+                    <QuickPenaltyGrant studentId={o.studentId} />
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )
+      ) : filtered.length === 0 ? (
         <EmptyState title="신청이 없습니다" />
       ) : (
         <div className="flex flex-col gap-3">
