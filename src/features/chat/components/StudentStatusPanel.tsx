@@ -13,6 +13,7 @@ import { useOngoingExtraStudyQuery, useTodayExtraStudyQuery } from '@/features/e
 import { sumExtraStudyMinutes } from '@/features/extra-study/api';
 import { useCreatePenaltyMutation } from '@/features/admin-penalty/hooks';
 import { QuickPenaltyGrant } from '@/features/admin-penalty/components/QuickPenaltyGrant';
+import { LiveElapsed } from '@/components/LiveElapsed';
 import { useUpsertAttendanceMutation } from '@/features/admin-attendance/hooks';
 import { useSendMessageMutation } from '@/features/chat/hooks';
 import {
@@ -276,6 +277,14 @@ export function StudentStatusPanel({ studentId, roomId, className }: Props) {
             <span>{status.label}</span>
           </div>
         </div>
+
+        {/* 진행 중 외출: 실시간 경과 시간 */}
+        {ongoingOuting && (
+          <div className="flex items-center justify-between rounded-md bg-orange-50 px-2 py-1.5 text-xs">
+            <span className="font-medium text-orange-700">🚶 외출 중{ongoingOuting.reason ? ` · ${ongoingOuting.reason}` : ''}</span>
+            <LiveElapsed startedAt={ongoingOuting.started_at} className="font-mono font-semibold text-orange-600" />
+          </div>
+        )}
 
         {/* 이용권 */}
         <div className="border-b border-gray-100 pb-2">
