@@ -56,17 +56,25 @@ export async function fetchAttendanceRequests(): Promise<AttendanceRequestRow[]>
   ].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
-/** 신청 승인/거절 (status + reviewed_by/at 갱신). RLS상 관리자만 가능. */
+/**
+ * 신청 처리. 'approved'/'rejected'는 처리자·시각 기록, 'pending'은 처리 취소(되돌리기)로
+ * 처리자·시각을 비운다. RLS상 관리자만 가능.
+ */
 export async function reviewAttendanceRequest(
   kind: RequestKind,
   requestId: string,
-  status: 'approved' | 'rejected',
+  status: 'approved' | 'rejected' | 'pending',
   adminId: string
 ): Promise<void> {
   const table = kind === 'absence' ? 'absence_requests' : 'leave_requests';
+  const reverting = status === 'pending';
   const { error } = await supabase
     .from(table)
-    .update({ status, reviewed_by: adminId, reviewed_at: new Date().toISOString() })
+    .update({
+      status,
+      reviewed_by: reverting ? null : adminId,
+      reviewed_at: reverting ? null : new Date().toISOString(),
+    })
     .eq('id', requestId);
   if (error) throw error;
 }

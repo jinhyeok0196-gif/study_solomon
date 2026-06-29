@@ -22,7 +22,7 @@ export function useReviewAttendanceRequestMutation() {
     }: {
       kind: RequestKind;
       requestId: string;
-      status: 'approved' | 'rejected';
+      status: 'approved' | 'rejected' | 'pending';
       adminId: string;
     }) => reviewAttendanceRequest(kind, requestId, status, adminId),
     onSuccess: () => qc.invalidateQueries({ queryKey: QUERY_KEY }),

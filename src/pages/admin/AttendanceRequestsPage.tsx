@@ -39,10 +39,11 @@ export default function AttendanceRequestsPage() {
   const { data: requests, isLoading } = useAttendanceRequestsQuery();
   const review = useReviewAttendanceRequestMutation();
 
+  type Action = 'approved' | 'rejected' | 'pending';
   const [tab, setTab] = useState<Tab>('all');
-  const [target, setTarget] = useState<{ req: AttendanceRequestRow; action: 'approved' | 'rejected' } | null>(
-    null
-  );
+  const [target, setTarget] = useState<{ req: AttendanceRequestRow; action: Action } | null>(null);
+
+  const ACTION_VERB: Record<Action, string> = { approved: '승인', rejected: '거절', pending: '처리 취소' };
 
   const filtered = (requests ?? []).filter((r) => tab === 'all' || r.kind === tab);
   const pendingCount = (requests ?? []).filter((r) => r.status === 'pending').length;
@@ -114,7 +115,7 @@ export default function AttendanceRequestsPage() {
                   <p className="mt-1 text-xs text-gray-400">신청일: {fmt(req.createdAt)}</p>
                   {req.reviewedAt && <p className="text-xs text-gray-400">처리일: {fmt(req.reviewedAt)}</p>}
                 </div>
-                {req.status === 'pending' && (
+                {req.status === 'pending' ? (
                   <div className="flex flex-col gap-1">
                     <Button
                       variant="primary"
@@ -131,6 +132,15 @@ export default function AttendanceRequestsPage() {
                       거절
                     </Button>
                   </div>
+                ) : (
+                  // 이미 처리된 건은 '승인 취소'/'거절 취소'로 대기 상태로 되돌릴 수 있다
+                  <Button
+                    variant="secondary"
+                    className="px-3 py-1 text-xs"
+                    onClick={() => setTarget({ req, action: 'pending' })}
+                  >
+                    {req.status === 'approved' ? '승인 취소' : '거절 취소'}
+                  </Button>
                 )}
               </div>
             </Card>
@@ -142,7 +152,7 @@ export default function AttendanceRequestsPage() {
       <Modal
         open={!!target}
         onClose={() => setTarget(null)}
-        title={target?.action === 'approved' ? '신청 승인' : '신청 거절'}
+        title={target ? `신청 ${ACTION_VERB[target.action]}` : ''}
       >
         {target && (
           <div className="flex flex-col gap-3">
@@ -151,19 +161,25 @@ export default function AttendanceRequestsPage() {
               <span className="font-medium">{REQUEST_KIND_LABEL[target.req.kind]} 신청</span>(
               {fmt(target.req.requestDate)},{' '}
               {target.req.periodNumbers.length > 0 ? `${target.req.periodNumbers.join(', ')}교시` : '-'})을{' '}
-              {target.action === 'approved' ? '승인' : '거절'}하겠습니까?
+              {target.action === 'pending' ? (
+                <>다시 <span className="font-medium">대기</span> 상태로 되돌리겠습니까?</>
+              ) : (
+                <>{ACTION_VERB[target.action]}하겠습니까?</>
+              )}
             </p>
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setTarget(null)}>
-                취소
+                닫기
               </Button>
               <Button
-                variant={target.action === 'approved' ? 'primary' : 'danger'}
+                variant={
+                  target.action === 'approved' ? 'primary' : target.action === 'rejected' ? 'danger' : 'secondary'
+                }
                 className="flex-1"
                 onClick={handleConfirm}
                 disabled={review.isPending}
               >
-                {review.isPending ? '처리 중...' : target.action === 'approved' ? '승인' : '거절'}
+                {review.isPending ? '처리 중...' : target.action === 'pending' ? '되돌리기' : ACTION_VERB[target.action]}
               </Button>
             </div>
           </div>
