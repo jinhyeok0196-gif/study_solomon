@@ -4,6 +4,7 @@ import {
   awayDeductionMinutes,
   computeAttendanceStats,
   studySecondsForDay,
+  liveStudySecondsFromSchedule,
   recordStudyMinutes,
 } from './stats';
 import type { AttendanceRecordWithPeriod } from './api';
@@ -127,6 +128,39 @@ describe('studySecondsForDay', () => {
   it('returns 0 when the student never checked in (no presence)', () => {
     const noCheckin = makeRecord({ status: 'present', periodStartTime: '09:00:00', periodEndTime: '10:20:00' });
     expect(studySecondsForDay([noCheckin], [], [], at(9, 30))).toBe(0);
+  });
+});
+
+describe('liveStudySecondsFromSchedule', () => {
+  const at = (h: number, m: number) => new Date(2026, 5, 1, h, m).getTime();
+  const iso = (h: number, m: number) => new Date(2026, 5, 1, h, m).toISOString();
+  // 1교시 09:00~10:20, 2교시 10:30~11:50 (오늘 신청한 수업 교시 시간표)
+  const classIntervals = [
+    { start: at(9, 0), end: at(10, 20) },
+    { start: at(10, 30), end: at(11, 50) },
+  ];
+
+  it('진행 중 교시도(레코드 없어도) 재실 중이면 카운팅한다', () => {
+    const presence = { start: at(9, 0), end: null }; // 09:00 등원, 미하원
+    // 11:00 시점 → 1교시 80분(4800) + 2교시 10:30~11:00 30분(1800) = 6600초
+    expect(liveStudySecondsFromSchedule(classIntervals, presence, [], [], at(11, 0))).toBe(6600);
+  });
+
+  it('등원 기록 없으면(presence null) 0', () => {
+    expect(liveStudySecondsFromSchedule(classIntervals, null, [], [], at(11, 0))).toBe(0);
+  });
+
+  it('지각 등원은 등원 시각부터 카운팅', () => {
+    // 10:50 등원 → 1교시 0, 2교시 10:50~11:20(현재) 30분 = 1800초
+    const presence = { start: at(10, 50), end: null };
+    expect(liveStudySecondsFromSchedule(classIntervals, presence, [], [], at(11, 20))).toBe(1800);
+  });
+
+  it('하원 시각까지만, 외출은 차감', () => {
+    const presence = { start: at(9, 0), end: at(10, 40) }; // 10:40 하원
+    const away = [{ startedAt: iso(9, 10), endedAt: iso(9, 30) }]; // 1교시 중 20분 외출
+    // 1교시 80분 + 2교시 10:30~10:40 10분 = 90분, − 외출 20분 = 70분 = 4200초
+    expect(liveStudySecondsFromSchedule(classIntervals, presence, [], away, at(12, 0))).toBe(4200);
   });
 });
 

@@ -166,6 +166,54 @@ export function studySecondsForDay(
   return Math.max(0, Math.floor(seconds));
 }
 
+/**
+ * 라이브(오늘) 순공시간(초). 교시 구간을 '출결 레코드'가 아니라 '신청한 수업 교시 시간표'
+ * (classIntervals)로 직접 받는다 → 아직 레코드가 없는 진행 중 교시도 재실 구간과 겹치면
+ * 매초 카운팅된다. studySecondsForDay(레코드 기반)는 과거 확정일용으로 유지.
+ */
+export function liveStudySecondsFromSchedule(
+  classIntervals: StudyInterval[],
+  presence: PresenceSpan | null,
+  extraLogs: LiveStudyLog[],
+  awayLogs: AwayLog[],
+  nowMs: number
+): number {
+  // 재실 구간 ∩ 수업 교시 = 실제 공부 구간
+  const attended: StudyInterval[] = [];
+  if (presence) {
+    const presEnd = presence.end ?? nowMs;
+    for (const iv of classIntervals) {
+      const s = Math.max(presence.start, iv.start);
+      const e = Math.min(presEnd, iv.end);
+      if (e > s) attended.push({ start: s, end: e });
+    }
+  }
+
+  let seconds = 0;
+  for (const iv of attended) seconds += (iv.end - iv.start) / 1000;
+
+  // 교시 중 외출/파워냅 차감 (진행 중이면 현재 시각까지)
+  for (const log of awayLogs) {
+    const ls = new Date(log.startedAt).getTime();
+    const le = log.endedAt ? new Date(log.endedAt).getTime() : nowMs;
+    if (!Number.isFinite(ls) || le <= ls) continue;
+    for (const iv of attended) {
+      const s = Math.max(ls, iv.start);
+      const e = Math.min(le, iv.end);
+      if (e > s) seconds -= (e - s) / 1000;
+    }
+  }
+
+  // 교시외공부(비수업 시간 공부) 가산 (진행 중이면 현재 시각까지)
+  for (const log of extraLogs) {
+    const s = new Date(log.startedAt).getTime();
+    const e = log.endedAt ? new Date(log.endedAt).getTime() : nowMs;
+    if (Number.isFinite(s) && e > s) seconds += (e - s) / 1000;
+  }
+
+  return Math.max(0, Math.floor(seconds));
+}
+
 export interface AttendanceStats {
   totalRecords: number;
   attendanceRate: number;

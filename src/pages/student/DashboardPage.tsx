@@ -19,7 +19,7 @@ import { StudentStatusBadge } from '@/components/schedule/StudentStatusBadge';
 import { ExtraStudyCard } from '@/features/extra-study/components/ExtraStudyCard';
 import { ActivityCalendar } from '@/features/activity-calendar/components/ActivityCalendar';
 import { toLocalDateKey } from '@/features/activity-calendar/aggregate';
-import { studySecondsForDay } from '@/features/attendance/stats';
+import { liveStudySecondsFromSchedule, presenceSpanFromRecords } from '@/features/attendance/stats';
 import { periodActivityBadges, type ActivityBadge } from '@/components/schedule/activityBadges';
 import { useOngoingOutingQuery, useAllOutingsQuery } from '@/features/outing/hooks';
 import { useTodayNapQuery, useRecentNapsQuery } from '@/features/powernap/hooks';
@@ -75,8 +75,18 @@ export default function DashboardPage() {
 
   const todayKey = toLocalDateKey(now.toISOString());
   // 오늘 순공시간은 매초 실시간 계산한다 (now가 의존성에 있어 1초마다 재계산).
+  // 교시 구간은 '출결 레코드'가 아니라 '오늘 신청한 수업 교시 시간표'로 만든다 →
+  // 아직 레코드가 없는 진행 중 교시(첫 교시 이후)도 재실 중이면 매초 카운팅된다.
   const todayStudySeconds = useMemo(() => {
     const todayRecords = allRecords.filter((r) => r.classDate === todayKey);
+    const presence = presenceSpanFromRecords(todayRecords);
+    const classIntervals = (periods ?? [])
+      .filter((p) => todayPeriodNumbers.has(p.period_number))
+      .map((p) => ({
+        start: new Date(`${todayKey}T${p.start_time}`).getTime(),
+        end: new Date(`${todayKey}T${p.end_time}`).getTime(),
+      }))
+      .filter((iv) => Number.isFinite(iv.start) && Number.isFinite(iv.end) && iv.end > iv.start);
     const todayExtra = (extraLogs ?? [])
       .filter((e) => e.study_date === todayKey)
       .map((e) => ({ startedAt: e.started_at, endedAt: e.ended_at }));
@@ -88,8 +98,8 @@ export default function DashboardPage() {
         .filter((n) => n.nap_date === todayKey)
         .map((n) => ({ startedAt: n.started_at, endedAt: n.ended_at })),
     ];
-    return studySecondsForDay(todayRecords, todayExtra, todayAway, now.getTime());
-  }, [allRecords, extraLogs, outingLogs, napLogs, todayKey, now]);
+    return liveStudySecondsFromSchedule(classIntervals, presence, todayExtra, todayAway, now.getTime());
+  }, [allRecords, periods, todayPeriodNumbers, extraLogs, outingLogs, napLogs, todayKey, now]);
 
   const studyH = Math.floor(todayStudySeconds / 3600);
   const studyM = Math.floor((todayStudySeconds % 3600) / 60);
