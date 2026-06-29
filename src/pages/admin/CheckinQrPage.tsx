@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { Spinner } from '@/components/ui/Spinner';
 import { useCurrentTime } from '@/hooks/useCurrentTime';
 import { useCheckinTokenQuery } from '@/features/checkin/hooks';
+import { ADMIN_PATHS } from '@/routes/paths';
 
 export default function CheckinQrPage() {
   const { data: token, isLoading, error } = useCheckinTokenQuery();
@@ -33,6 +35,14 @@ export default function CheckinQrPage() {
       <div className="text-center">
         <h1 className="text-2xl font-bold text-gray-800">등·하원 체크인</h1>
         <p className="mt-1 text-gray-500">아래 QR을 휴대폰 카메라로 스캔하세요</p>
+        <Link
+          to={ADMIN_PATHS.checkinKiosk}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 inline-flex items-center gap-1 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+        >
+          🖥️ 전체화면 키오스크 열기
+        </Link>
       </div>
 
       <div className="text-center">

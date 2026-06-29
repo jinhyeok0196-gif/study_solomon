@@ -28,4 +28,5 @@ export const ADMIN_PATHS = {
   chat: '/admin/chat',
   monitor: '/admin/monitor',
   checkinQr: '/admin/checkin-qr',
+  checkinKiosk: '/checkin-kiosk',
 } as const;

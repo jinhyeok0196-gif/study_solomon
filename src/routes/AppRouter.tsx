@@ -35,12 +35,25 @@ import RequestsPage from '@/pages/admin/RequestsPage';
 import AdminChatPage from '@/pages/admin/ChatPage';
 import AdminMonitorPage from '@/pages/admin/MonitorPage';
 import CheckinQrPage from '@/pages/admin/CheckinQrPage';
+import CheckinKioskPage from '@/pages/admin/CheckinKioskPage';
 
 export function AppRouter() {
   return (
     <Routes>
       <Route path="/login" element={<StudentLoginPage />} />
       <Route path="/admin/login" element={<AdminLoginPage />} />
+
+      {/* 입구 키오스크: 관리자 인증 필요하지만 사이드바/헤더 없는 전체화면 단독 페이지 */}
+      <Route
+        path={ADMIN_PATHS.checkinKiosk}
+        element={
+          <ProtectedRoute redirectTo={ADMIN_PATHS.login}>
+            <RoleGuard role="admin" fallback={STUDENT_PATHS.dashboard}>
+              <CheckinKioskPage />
+            </RoleGuard>
+          </ProtectedRoute>
+        }
+      />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route path="/auth/register" element={<AuthRegisterPage />} />
 
