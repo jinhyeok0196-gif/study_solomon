@@ -3,6 +3,7 @@ import { getWeekStartDate, todayDayOfWeekKey } from '@/features/schedule/dates';
 
 export interface DashboardSummary {
   totalStudents: number;
+  activeStudents: number;
   expectedTodayCount: number;
   presentNowCount: number;
   outingNowCount: number;
@@ -26,12 +27,17 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
 
   const [
     totalStudentsResult,
+    activeStudentsResult,
     expectedTodayResult,
     outingNowResult,
     powerNapNowResult,
     todayAttendanceResult,
   ] = await Promise.all([
     supabase.from('student_profiles').select('id', { count: 'exact', head: true }),
+    supabase
+      .from('student_profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('membership_status', 'active'),
     supabase
       .from('schedule_items')
       .select('weekly_schedules!inner(student_id, week_start_date)')
@@ -47,6 +53,7 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
   ]);
 
   if (totalStudentsResult.error) throw totalStudentsResult.error;
+  if (activeStudentsResult.error) throw activeStudentsResult.error;
   if (expectedTodayResult.error) throw expectedTodayResult.error;
   if (outingNowResult.error) throw outingNowResult.error;
   if (powerNapNowResult.error) throw powerNapNowResult.error;
@@ -68,6 +75,7 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
 
   return {
     totalStudents: totalStudentsResult.count ?? 0,
+    activeStudents: activeStudentsResult.count ?? 0,
     expectedTodayCount: expectedStudentIds.size,
     presentNowCount: Math.max(0, presentToday - outingNowCount - powerNapNowCount),
     outingNowCount,

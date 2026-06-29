@@ -27,7 +27,7 @@ const SUMMARY_ITEMS = [
   { key: 'powerNapNowCount', label: '파워냅', bg: 'bg-purple-50', text: 'text-purple-700' },
   { key: 'absentTodayCount', label: '결석', bg: 'bg-red-50', text: 'text-red-600' },
   { key: 'lateTodayCount', label: '지각', bg: 'bg-yellow-50', text: 'text-yellow-700' },
-  { key: 'totalStudents', label: '전체', bg: 'bg-gray-50', text: 'text-gray-700' },
+  { key: 'activeStudents', label: '전체', bg: 'bg-gray-50', text: 'text-gray-700' },
 ] as const;
 
 function StudentRoomBridge({ studentId }: { studentId: string }) {
