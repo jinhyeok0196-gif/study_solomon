@@ -45,6 +45,11 @@ function fmtStudyShort(min: number): string {
   return `${h.toFixed(h >= 10 ? 0 : 1)}h`;
 }
 
+/** 활동 표시용 작은 색 원형 점 */
+function Dot({ className }: { className: string }) {
+  return <span className={cn('h-1.5 w-1.5 rounded-full', className)} />;
+}
+
 function SectionCard({
   title,
   color,
@@ -145,7 +150,7 @@ export function ActivityCalendar({ studentId }: Props) {
               key={key}
               onClick={() => setSelectedKey(key)}
               className={cn(
-                'flex h-14 flex-col items-center justify-start rounded-md border py-1 transition-colors',
+                'flex h-16 flex-col items-center justify-start rounded-md border py-1 transition-colors',
                 isSelected ? 'border-brand-500 bg-brand-50' : 'border-transparent hover:bg-gray-50',
                 tone === 'absent' && !isSelected && 'bg-red-50',
                 !inMonth && 'opacity-40'
@@ -154,18 +159,52 @@ export function ActivityCalendar({ studentId }: Props) {
               <span className={cn('text-xs', isToday ? 'font-bold text-brand-600' : 'text-gray-700')}>
                 {format(day, 'd')}
               </span>
-              {studyMin > 0 ? (
-                <span className="mt-1 text-[11px] font-semibold leading-none text-emerald-600">
+              {act && (
+                <span className="mt-1 flex flex-wrap items-center justify-center gap-0.5">
+                  {tone && (
+                    <Dot
+                      className={cn(
+                        tone === 'absent' && 'bg-red-500',
+                        tone === 'late' && 'bg-amber-500',
+                        tone === 'present' && 'bg-emerald-500'
+                      )}
+                    />
+                  )}
+                  {act.penalties.length > 0 && <Dot className="bg-rose-600" />}
+                  {act.warnings.length > 0 && <Dot className="bg-orange-600" />}
+                  {act.naps.length > 0 && <Dot className="bg-purple-500" />}
+                </span>
+              )}
+              {studyMin > 0 && (
+                <span className="mt-0.5 text-[11px] font-semibold leading-none text-emerald-600">
                   {fmtStudyShort(studyMin)}
                 </span>
-              ) : (
-                tone === 'absent' && (
-                  <span className="mt-1 text-[10px] font-medium leading-none text-red-400">결석</span>
-                )
               )}
             </button>
           );
         })}
+      </div>
+
+      {/* 범례 */}
+      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500">
+        <span className="flex items-center gap-1">
+          <Dot className="bg-emerald-500" /> 출석
+        </span>
+        <span className="flex items-center gap-1">
+          <Dot className="bg-amber-500" /> 지각
+        </span>
+        <span className="flex items-center gap-1">
+          <Dot className="bg-red-500" /> 결석
+        </span>
+        <span className="flex items-center gap-1">
+          <Dot className="bg-rose-600" /> 벌점
+        </span>
+        <span className="flex items-center gap-1">
+          <Dot className="bg-orange-600" /> 경고
+        </span>
+        <span className="flex items-center gap-1">
+          <Dot className="bg-purple-500" /> 파워냅
+        </span>
       </div>
 
       {/* 안내 */}
