@@ -26,10 +26,10 @@ import { useTodayNapQuery, useRecentNapsQuery } from '@/features/powernap/hooks'
 import { useAllExtraStudyQuery } from '@/features/extra-study/hooks';
 
 const QUICK_LINKS = [
-  { to: STUDENT_PATHS.outing, label: '외출' },
-  { to: STUDENT_PATHS.powerNap, label: '파워냅' },
-  { to: STUDENT_PATHS.absenceRequest, label: '결석 신청' },
-  { to: STUDENT_PATHS.leaveRequest, label: '조퇴 신청' },
+  { to: STUDENT_PATHS.outing, label: '외출', desc: '교시 중 잠시 자리를 비울 경우 (화장실, 식사, 전화 등)' },
+  { to: STUDENT_PATHS.powerNap, label: '파워냅', desc: '교시 중 집중력 회복을 위한 짧은 휴식' },
+  { to: STUDENT_PATHS.absenceRequest, label: '결석 신청', desc: '예정된 교시에 참석할 수 없는 경우' },
+  { to: STUDENT_PATHS.leaveRequest, label: '조퇴 신청', desc: '학습을 중단하고 귀가할 경우' },
 ];
 
 export default function DashboardPage() {
@@ -173,8 +173,8 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* 빠른 링크 */}
-      <div className="grid grid-cols-4 gap-2">
+      {/* 빠른 링크 (버튼 아래 회색 안내 문구) */}
+      <div className="grid grid-cols-1 gap-2">
         {QUICK_LINKS.map((link) => {
           // 오늘 파워냅을 이미 사용 완료했으면 '사용완료'로 비활성화
           const napDone = link.to === STUDENT_PATHS.powerNap && todayNap?.status === 'completed';
@@ -183,9 +183,10 @@ export default function DashboardPage() {
               <div
                 key={link.to}
                 aria-disabled="true"
-                className="flex cursor-not-allowed items-center justify-center rounded-md border border-gray-200 bg-gray-100 py-3 text-xs font-medium text-gray-400"
+                className="flex cursor-not-allowed flex-col rounded-md border border-gray-200 bg-gray-100 px-3 py-2.5"
               >
-                사용완료
+                <span className="text-sm font-medium text-gray-400">{link.label} · 사용완료</span>
+                <span className="mt-0.5 text-xs text-gray-400">{link.desc}</span>
               </div>
             );
           }
@@ -193,9 +194,10 @@ export default function DashboardPage() {
             <Link
               key={link.to}
               to={link.to}
-              className="flex items-center justify-center rounded-md border border-gray-200 bg-white py-3 text-xs font-medium text-gray-700 hover:border-brand-300"
+              className="flex flex-col rounded-md border border-gray-200 bg-white px-3 py-2.5 hover:border-brand-300"
             >
-              {link.label}
+              <span className="text-sm font-medium text-gray-700">{link.label}</span>
+              <span className="mt-0.5 text-xs text-gray-400">{link.desc}</span>
             </Link>
           );
         })}
