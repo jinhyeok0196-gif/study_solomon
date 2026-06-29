@@ -1,9 +1,15 @@
 import { isSameMonth } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
 import { useAttendanceRecordsQuery } from '@/features/attendance/hooks';
-import { computeAttendanceStats } from '@/features/attendance/stats';
+import {
+  attendedIntervalsFromRecords,
+  awayDeductionMinutes,
+  computeAttendanceStats,
+} from '@/features/attendance/stats';
 import { useAllExtraStudyQuery } from '@/features/extra-study/hooks';
 import { sumExtraStudyMinutes } from '@/features/extra-study/api';
+import { useAllOutingsQuery } from '@/features/outing/hooks';
+import { useRecentNapsQuery } from '@/features/powernap/hooks';
 import { ATTENDANCE_STATUS_LABEL } from '@/features/attendance/labels';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -18,6 +24,8 @@ export default function AttendancePage() {
   const { user } = useAuth();
   const { data: records, isLoading } = useAttendanceRecordsQuery(user!.id);
   const { data: extraStudyLogs } = useAllExtraStudyQuery(user!.id);
+  const { data: outingLogs } = useAllOutingsQuery(user!.id);
+  const { data: napLogs } = useRecentNapsQuery(user!.id);
 
   if (isLoading) {
     return (
@@ -30,10 +38,18 @@ export default function AttendancePage() {
   const allRecords = records ?? [];
   const now = new Date();
   const monthRecords = allRecords.filter((record) => isSameMonth(new Date(record.classDate), now));
+  const awayDeduction = awayDeductionMinutes(
+    attendedIntervalsFromRecords(allRecords),
+    [...(outingLogs ?? []), ...(napLogs ?? [])].map((l) => ({
+      startedAt: l.started_at,
+      endedAt: l.ended_at,
+    }))
+  );
   const stats = computeAttendanceStats(
     allRecords,
     monthRecords,
-    sumExtraStudyMinutes(extraStudyLogs ?? [])
+    sumExtraStudyMinutes(extraStudyLogs ?? []),
+    awayDeduction
   );
 
   return (

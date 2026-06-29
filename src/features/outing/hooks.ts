@@ -15,6 +15,14 @@ export function useRecentOutingsQuery(studentId: string) {
   });
 }
 
+export function useAllOutingsQuery(studentId: string) {
+  return useQuery({
+    queryKey: ['outing-all', studentId],
+    queryFn: () => fetchRecentOutings(studentId, 500),
+    enabled: !!studentId,
+  });
+}
+
 export function useOutingMutations(studentId: string) {
   const queryClient = useQueryClient();
   const invalidate = () => {

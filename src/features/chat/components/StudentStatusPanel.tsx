@@ -6,7 +6,8 @@ import { useCurrentTime } from '@/hooks/useCurrentTime';
 import { useScheduleStatus } from '@/hooks/useScheduleStatus';
 import { useStudentDetailQuery } from '@/features/admin-students/hooks';
 import { usePenaltyProfileQuery, usePenaltyRecordsQuery } from '@/features/penalty/hooks';
-import { useOngoingOutingQuery, useOutingMutations } from '@/features/outing/hooks';
+import { useOngoingOutingQuery, useOutingMutations, useRecentOutingsQuery } from '@/features/outing/hooks';
+import { awayDeductionMinutes, type StudyInterval } from '@/features/attendance/stats';
 import { useTodayNapQuery, useNapMutations } from '@/features/powernap/hooks';
 import { useOngoingExtraStudyQuery, useTodayExtraStudyQuery } from '@/features/extra-study/hooks';
 import { sumExtraStudyMinutes } from '@/features/extra-study/api';
@@ -126,6 +127,7 @@ export function StudentStatusPanel({ studentId, roomId, className }: Props) {
   const { data: penaltyProfile } = usePenaltyProfileQuery(studentId);
   const { data: penaltyRecords } = usePenaltyRecordsQuery(studentId);
   const { data: ongoingOuting } = useOngoingOutingQuery(studentId);
+  const { data: recentOutings } = useRecentOutingsQuery(studentId);
   const { data: todayNap } = useTodayNapQuery(studentId);
   const { data: ongoingExtraStudy } = useOngoingExtraStudyQuery(studentId);
   const { data: todayExtraStudy } = useTodayExtraStudyQuery(studentId);
@@ -184,18 +186,42 @@ export function StudentStatusPanel({ studentId, roomId, className }: Props) {
     0
   );
   const napMinutes = todayNap ? durationMinutes(todayNap.started_at, todayNap.ended_at) : 0;
-  // 순공시간 = 출석한 수업 교시 시간 + 교시외공부 시간 (쉬는/식사시간 제외)
+  // 순공시간 = 출석한 수업 교시 시간 + 교시외공부 − (교시 중 외출/파워냅), 쉬는/식사시간 제외
+  const todayKey = new Date().toISOString().slice(0, 10);
   const periodMinutesMap = new Map<number, number>();
+  const periodTimeMap = new Map<number, { start: string; end: string }>();
   (periods ?? []).forEach((p) => {
     const [sh, sm] = p.start_time.slice(0, 5).split(':').map(Number);
     const [eh, em] = p.end_time.slice(0, 5).split(':').map(Number);
     periodMinutesMap.set(p.period_number, Math.max(0, eh * 60 + em - (sh * 60 + sm)));
+    periodTimeMap.set(p.period_number, { start: p.start_time, end: p.end_time });
   });
-  const periodStudyMinutes = (todayAttendance ?? []).reduce((sum, a) => {
-    if (a.status !== 'present' && a.status !== 'late') return sum;
-    return sum + (periodMinutesMap.get(a.period_number) ?? 0);
-  }, 0);
-  const studyMinutes = periodStudyMinutes + sumExtraStudyMinutes(todayExtraStudy ?? []);
+  const attendedToday = (todayAttendance ?? []).filter(
+    (a) => a.status === 'present' || a.status === 'late'
+  );
+  const periodStudyMinutes = attendedToday.reduce(
+    (sum, a) => sum + (periodMinutesMap.get(a.period_number) ?? 0),
+    0
+  );
+  const attendedIntervals: StudyInterval[] = attendedToday
+    .map((a) => {
+      const t = periodTimeMap.get(a.period_number);
+      if (!t) return null;
+      return {
+        start: new Date(`${todayKey}T${t.start}`).getTime(),
+        end: new Date(`${todayKey}T${t.end}`).getTime(),
+      };
+    })
+    .filter((iv): iv is StudyInterval => iv != null);
+  const todayOutingLogs = (recentOutings ?? []).filter((o) => o.started_at.slice(0, 10) === todayKey);
+  const awayLogs = [
+    ...todayOutingLogs.map((o) => ({ startedAt: o.started_at, endedAt: o.ended_at })),
+    ...(todayNap ? [{ startedAt: todayNap.started_at, endedAt: todayNap.ended_at }] : []),
+  ];
+  const studyMinutes = Math.max(
+    0,
+    periodStudyMinutes + sumExtraStudyMinutes(todayExtraStudy ?? []) - awayDeductionMinutes(attendedIntervals, awayLogs)
+  );
 
   const [penaltyForm, setPenaltyForm] = useState<{ reasonCode: PenaltyReasonCode | ''; desc: string }>({
     reasonCode: '',

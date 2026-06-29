@@ -34,10 +34,11 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
     todayAttendanceResult,
   ] = await Promise.all([
     supabase.from('student_profiles').select('id', { count: 'exact', head: true }),
+    // 실이용자 = 유효한 이용권 보유자(이용권 종료일이 오늘 이후). 이용권 미부여(null)/만료자는 제외.
     supabase
       .from('student_profiles')
       .select('id', { count: 'exact', head: true })
-      .eq('membership_status', 'active'),
+      .gte('membership_end_date', today),
     supabase
       .from('schedule_items')
       .select('weekly_schedules!inner(student_id, week_start_date)')

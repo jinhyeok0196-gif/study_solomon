@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { computeAttendanceStats, recordStudyMinutes } from './stats';
+import {
+  attendedIntervalsFromRecords,
+  awayDeductionMinutes,
+  computeAttendanceStats,
+  recordStudyMinutes,
+} from './stats';
 import type { AttendanceRecordWithPeriod } from './api';
 
 function makeRecord(overrides: Partial<AttendanceRecordWithPeriod>): AttendanceRecordWithPeriod {
@@ -62,9 +67,40 @@ describe('computeAttendanceStats', () => {
     expect(stats.cumulativeStudyMinutes).toBe(80 + 45);
   });
 
+  it('subtracts away (outing/nap) deduction and clamps at 0', () => {
+    const records = [makeRecord({ status: 'present' })]; // 80분
+    expect(computeAttendanceStats(records, records, 0, 20).cumulativeStudyMinutes).toBe(60);
+    expect(computeAttendanceStats(records, records, 0, 999).cumulativeStudyMinutes).toBe(0);
+  });
+
   it('handles zero records without dividing by zero', () => {
     const stats = computeAttendanceStats([], []);
     expect(stats.attendanceRate).toBe(0);
     expect(stats.absenceRate).toBe(0);
+  });
+});
+
+describe('awayDeductionMinutes', () => {
+  const present = makeRecord({
+    status: 'present',
+    classDate: '2026-06-01',
+    periodStartTime: '09:00:00',
+    periodEndTime: '10:20:00',
+  });
+
+  it('deducts the overlap of away logs with attended class periods', () => {
+    const intervals = attendedIntervalsFromRecords([present]);
+    const away = [
+      { startedAt: new Date(2026, 5, 1, 9, 10).toISOString(), endedAt: new Date(2026, 5, 1, 9, 30).toISOString() },
+    ];
+    expect(awayDeductionMinutes(intervals, away)).toBe(20);
+  });
+
+  it('does not deduct away time outside class periods', () => {
+    const intervals = attendedIntervalsFromRecords([present]);
+    const away = [
+      { startedAt: new Date(2026, 5, 1, 12, 0).toISOString(), endedAt: new Date(2026, 5, 1, 12, 30).toISOString() },
+    ];
+    expect(awayDeductionMinutes(intervals, away)).toBe(0);
   });
 });
