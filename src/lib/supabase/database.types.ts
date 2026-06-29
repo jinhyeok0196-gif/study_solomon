@@ -956,6 +956,11 @@ export type Database = {
         }
         Returns: undefined
       }
+      checkin_by_qr: {
+        Args: { p_token: string }
+        Returns: Json
+      }
+      current_checkin_token: { Args: never; Returns: string }
     }
     Enums: {
       [_ in never]: never

@@ -5,6 +5,7 @@ import { ADMIN_PATHS } from '@/routes/paths';
 const NAV_ITEMS = [
   { to: ADMIN_PATHS.dashboard, label: '대시보드' },
   { to: ADMIN_PATHS.monitor, label: '실시간 관제' },
+  { to: ADMIN_PATHS.checkinQr, label: '등하원 QR' },
   { to: ADMIN_PATHS.students, label: '학생 관리' },
   { to: ADMIN_PATHS.schedules, label: '시간표 관리' },
   { to: ADMIN_PATHS.attendance, label: '출석 관리' },

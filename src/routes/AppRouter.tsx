@@ -18,6 +18,7 @@ import PowerNapPage from '@/pages/student/PowerNapPage';
 import PenaltyPage from '@/pages/student/PenaltyPage';
 import MyPage from '@/pages/student/MyPage';
 import StudentChatPage from '@/pages/student/ChatPage';
+import CheckinPage from '@/pages/student/CheckinPage';
 
 import AuthCallbackPage from '@/pages/auth/CallbackPage';
 import AuthRegisterPage from '@/pages/auth/RegisterPage';
@@ -33,6 +34,7 @@ import NotificationsPage from '@/pages/admin/NotificationsPage';
 import RequestsPage from '@/pages/admin/RequestsPage';
 import AdminChatPage from '@/pages/admin/ChatPage';
 import AdminMonitorPage from '@/pages/admin/MonitorPage';
+import CheckinQrPage from '@/pages/admin/CheckinQrPage';
 
 export function AppRouter() {
   return (
@@ -62,6 +64,7 @@ export function AppRouter() {
         <Route path="/penalty" element={<PenaltyPage />} />
         <Route path="/mypage" element={<MyPage />} />
         <Route path="/chat" element={<StudentChatPage />} />
+        <Route path="/checkin" element={<CheckinPage />} />
       </Route>
 
       <Route
@@ -85,6 +88,7 @@ export function AppRouter() {
         <Route path="requests" element={<RequestsPage />} />
         <Route path="chat" element={<AdminChatPage />} />
         <Route path="monitor" element={<AdminMonitorPage />} />
+        <Route path="checkin-qr" element={<CheckinQrPage />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />

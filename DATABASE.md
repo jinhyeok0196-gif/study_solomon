@@ -28,6 +28,7 @@ Supabase(PostgreSQL) 기반. 모든 테이블은 `public` 스키마에 위치합
 | `message_reads` | 메시지 읽음 확인 |
 | `quick_replies` | 관리자용 빠른 답변 템플릿 |
 | `seat_layouts` | 물리적 좌석 배치 (실시간 관제판, 향후 드래그앤드롭 편집) |
+| `qr_config` | QR 등하원 체크인용 HMAC 비밀키 (RLS로 완전 차단, 함수만 접근) |
 
 ---
 
@@ -267,6 +268,34 @@ updated_at    timestamptz
 -- REPLICA IDENTITY FULL (Realtime), publication 등록됨
 ```
 
+### qr_config (QR 체크인 비밀키)
+```sql
+id          smallint  PK  -- 항상 1 (싱글턴)
+secret      text      -- HMAC 비밀키 (gen_random_bytes(32))
+updated_at  timestamptz
+-- RLS 활성화 + 정책 없음 + authenticated/anon GRANT 회수 → 직접 접근 완전 차단.
+-- SECURITY DEFINER 함수(_checkin_token 등)만 소유자 권한으로 접근.
+```
+
+---
+
+## QR 등하원 체크인
+
+문 앞 키오스크(관리자)가 30초마다 회전하는 토큰 QR을 표시하고, 로그인된 학생이
+본인 폰으로 스캔 → `/checkin?token=...` 페이지가 `checkin_by_qr()` 를 호출.
+
+- **토큰**: `'<window>.<hmac>'`. `window = floor(epoch/60)`, `hmac = HMAC(window, secret)`.
+  최근 3개 window(약 60~180초)만 유효 → 원격(집) 체크인 차단. (로그인 지연 고려)
+- **지각 기준**: 그날 학생이 신청한 첫 교시(`start_time` 최소)의 시작 시각.
+- **지각 벌점**: 시작 시각 이후 등원 시 `status='late'`, `penalty_records`에 `LATE`(2점) 즉시 부여
+  (분 단위는 `note`/`description`에 기록). 트리거가 누적·경고 처리.
+- **조퇴 벌점**: 하원 시 아직 시작 전인(`start_time > now`) 신청 교시가 남아 있으면 조퇴.
+  승인된 조퇴 신청(`leave_requests`, status='approved')이 커버하는 교시는 `excused_early_leave`(면제),
+  나머지는 `early_leave` + `UNAUTHORIZED_EARLY_LEAVE`(무단조퇴, 10점) 1회 부여.
+- **등원/하원 자동 판별**: 첫 스캔=등원, 이후 스캔(5분 경과)=하원(`checked_out_at`). 5분 이내 재스캔은 무시.
+- **알림**: 지각 등원 시 `notify_admins('late_checkin', ...)`, 무단 조퇴 시 `notify_admins('early_leave', ...)`.
+- ⚠️ DB 서버 타임존 기준 계산 (운영 시 `Asia/Seoul` 필요 — 무단결석 감지와 동일 전제).
+
 ---
 
 ## RLS 정책 원칙
@@ -340,6 +369,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE
 | `public.approve_request_log(...)` | 신청 승인 처리 |
 | `public.reject_request_log(...)` | 신청 반려 처리 |
 | `public.notify_admins(type, title, message, student_id)` | 관리자 알림 INSERT |
+| `public.current_checkin_token()` | 키오스크용 현재 QR 토큰 발급 (관리자 전용) |
+| `public.checkin_by_qr(p_token)` | 학생 QR 등원/하원 + 지각 판정·벌점 (등하원 자동 판별) |
+| `public._checkin_token(window)` | HMAC 토큰 계산 (내부 전용, 실행권한 회수) |
 
 ---
 
@@ -376,4 +408,5 @@ ALTER PUBLICATION supabase_realtime ADD TABLE
 20260630_chat_storage.sql                  -- Storage 버킷 설정
 20260701_chat_replica_identity.sql         -- Realtime REPLICA IDENTITY
 20260702_seat_layouts.sql                  -- 좌석 배치 + student_profiles.seat_number
+20260629120000_qr_checkin.sql              -- QR 등하원 체크인 (qr_config + checkin_by_qr 등)
 ```

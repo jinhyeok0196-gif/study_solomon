@@ -11,6 +11,7 @@ export const STUDENT_PATHS = {
   penalty: '/penalty',
   mypage: '/mypage',
   chat: '/chat',
+  checkin: '/checkin',
 } as const;
 
 export const ADMIN_PATHS = {
@@ -26,4 +27,5 @@ export const ADMIN_PATHS = {
   requests: '/admin/requests',
   chat: '/admin/chat',
   monitor: '/admin/monitor',
+  checkinQr: '/admin/checkin-qr',
 } as const;
