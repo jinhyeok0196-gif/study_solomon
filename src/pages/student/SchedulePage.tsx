@@ -46,18 +46,27 @@ export default function SchedulePage() {
   const { data: hasPendingUnlock } = usePendingScheduleUnlockQuery(user!.id, weekStartDate);
   const requestUnlockMutation = useRequestScheduleUnlockMutation(user!.id, weekStartDate);
   const { data: absenceRequests } = useMyRequestsQuery('absence', user!.id);
+  const { data: leaveRequests } = useMyRequestsQuery('leave', user!.id);
 
-  // 승인된 결석 중 현재 표시 중인 주(week)에 해당하는 교시 셀
-  const approvedAbsenceCells = useMemo(() => {
+  // 승인된 신청 중 현재 표시 중인 주(week)에 해당하는 교시 셀
+  const approvedCellsOf = (reqs: typeof absenceRequests) => {
     const set = new Set<string>();
-    for (const req of absenceRequests ?? []) {
+    for (const req of reqs ?? []) {
       if (req.status !== 'approved') continue;
       if (weekStartDateOf(req.requestDate) !== weekStartDate) continue;
       const day = dayOfWeekKeyOf(req.requestDate);
       for (const period of req.periodNumbers) set.add(cellKey(day, period));
     }
     return set;
-  }, [absenceRequests, weekStartDate]);
+  };
+  const approvedAbsenceCells = useMemo(
+    () => approvedCellsOf(absenceRequests),
+    [absenceRequests, weekStartDate] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const approvedLeaveCells = useMemo(
+    () => approvedCellsOf(leaveRequests),
+    [leaveRequests, weekStartDate] // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   useEffect(() => {
     setSelected(new Set((data?.cells ?? []).map((cell) => cellKey(cell.dayOfWeek, cell.periodNumber))));
@@ -188,6 +197,7 @@ export default function SchedulePage() {
             onCellChange={handleCellChange}
             readOnly={isLocked}
             absenceCells={approvedAbsenceCells}
+            leaveCells={approvedLeaveCells}
           />
 
           {/* 잠금 상태 안내 */}

@@ -10,6 +10,8 @@ interface WeeklyScheduleGridProps {
   readOnly?: boolean;
   /** 결석 승인된 셀(cellKey) — 해당 교시에 X·결석승인 표시 */
   absenceCells?: ReadonlySet<string>;
+  /** 조퇴 승인된 셀(cellKey) — 해당 교시에 X·조퇴승인 표시 */
+  leaveCells?: ReadonlySet<string>;
 }
 
 interface DragState {
@@ -33,6 +35,7 @@ export function WeeklyScheduleGrid({
   onCellChange,
   readOnly = false,
   absenceCells,
+  leaveCells,
 }: WeeklyScheduleGridProps) {
   const { data: periods } = usePeriods();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -181,7 +184,12 @@ export function WeeklyScheduleGrid({
                 {DAYS_OF_WEEK.map((day) => {
                   const key = cellKey(day, period.period_number);
                   const isSelected = visualSelected.has(key);
-                  const isAbsence = absenceCells?.has(key) ?? false;
+                  // 결석 승인(빨강) 우선, 없으면 조퇴 승인(주황)
+                  const mark = (absenceCells?.has(key)
+                    ? { label: '결석승인', btn: 'border-red-500 bg-red-50 text-red-600', text: 'text-red-600' }
+                    : leaveCells?.has(key)
+                      ? { label: '조퇴승인', btn: 'border-amber-500 bg-amber-50 text-amber-600', text: 'text-amber-600' }
+                      : null) as { label: string; btn: string; text: string } | null;
                   return (
                     <td key={key} className="border-b border-gray-100 p-1">
                       <div className="flex flex-col items-center gap-0.5">
@@ -195,22 +203,22 @@ export function WeeklyScheduleGrid({
                           onTouchStart={(e) => startDrag(day, period.period_number, e)}
                           onContextMenu={(e) => e.preventDefault()}
                           aria-pressed={isSelected}
-                          title={isAbsence ? '결석 승인된 교시' : undefined}
+                          title={mark ? `${mark.label}된 교시` : undefined}
                           className={cn(
                             'h-8 w-8 rounded-md border text-xs transition-colors',
-                            isAbsence
-                              ? 'border-red-500 bg-red-50 font-bold text-red-600'
+                            mark
+                              ? cn('font-bold', mark.btn)
                               : isSelected
                                 ? 'border-brand-600 bg-brand-600 text-white'
                                 : 'border-gray-200 bg-white text-transparent hover:border-brand-300',
                             readOnly && 'cursor-default opacity-70',
-                            readOnly && !isAbsence && 'hover:border-gray-200'
+                            readOnly && !mark && 'hover:border-gray-200'
                           )}
                         >
-                          {isAbsence ? '✕' : isSelected ? '✓' : '·'}
+                          {mark ? '✕' : isSelected ? '✓' : '·'}
                         </button>
-                        {isAbsence && (
-                          <span className="text-[8px] font-medium leading-none text-red-600">결석승인</span>
+                        {mark && (
+                          <span className={cn('text-[8px] font-medium leading-none', mark.text)}>{mark.label}</span>
                         )}
                       </div>
                     </td>

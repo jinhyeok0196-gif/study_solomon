@@ -46,14 +46,14 @@ export function RequestList({ kind, studentId }: RequestListProps) {
             <Badge tone={STATUS_TONE[request.status]}>{REQUEST_STATUS_LABEL[request.status]}</Badge>
           </div>
           <p className="text-gray-500">{request.reason}</p>
-          {request.status === 'pending' && (
+          {request.status !== 'rejected' && (
             <Button
               variant="ghost"
               className="self-start px-2 py-1 text-xs text-red-600"
               disabled={cancelMutation.isPending}
               onClick={() => cancelMutation.mutate(request.id)}
             >
-              취소
+              {request.status === 'approved' ? '승인 취소' : '취소'}
             </Button>
           )}
         </li>
