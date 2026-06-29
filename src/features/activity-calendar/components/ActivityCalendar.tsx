@@ -21,10 +21,15 @@ import { usePenaltyRecordsQuery, useWarningRecordsQuery } from '@/features/penal
 import { useRecentNapsQuery } from '@/features/powernap/hooks';
 import { useAllExtraStudyQuery } from '@/features/extra-study/hooks';
 import { useAllOutingsQuery } from '@/features/outing/hooks';
+import { usePeriods } from '@/hooks/usePeriods';
+import { useWeeklyScheduleQuery } from '@/features/schedule/hooks';
+import { getWeekStartDate, todayDayOfWeekKey } from '@/features/schedule/dates';
+import { liveStudySecondsFromSchedule, presenceSpanFromRecords } from '@/features/attendance/stats';
 import {
   attendanceTone,
   buildActivityMap,
   buildDailyStudyMinutes,
+  toLocalDateKey,
   type DayActivity,
 } from '../aggregate';
 
@@ -81,6 +86,8 @@ export function ActivityCalendar({ studentId }: Props) {
   const { data: naps } = useRecentNapsQuery(studentId);
   const { data: extraLogs } = useAllExtraStudyQuery(studentId);
   const { data: outings } = useAllOutingsQuery(studentId);
+  const { data: periods } = usePeriods();
+  const { data: weekSchedule } = useWeeklyScheduleQuery(studentId, getWeekStartDate(0));
 
   const [month, setMonth] = useState<Date>(() => new Date());
   const [selectedKey, setSelectedKey] = useState<string>(() => dateKey(new Date()));
@@ -94,6 +101,37 @@ export function ActivityCalendar({ studentId }: Props) {
     () => buildDailyStudyMinutes(attendance ?? [], extraLogs ?? [], outings ?? [], naps ?? []),
     [attendance, extraLogs, outings, naps]
   );
+
+  // 오늘 셀은 시간표 기반 실시간(분) 값으로 덮어쓴다 (진행 중 교시도 카운팅) — 대시보드와 동일
+  const todayKey = dateKey(new Date());
+  const todayLiveMinutes = useMemo(() => {
+    const dayKey = todayDayOfWeekKey();
+    const todayPeriods = new Set<number>(
+      (weekSchedule?.cells ?? []).filter((c) => c.dayOfWeek === dayKey).map((c) => c.periodNumber)
+    );
+    const todayRecords = (attendance ?? []).filter((r) => r.classDate === todayKey);
+    const presence = presenceSpanFromRecords(todayRecords);
+    const classIntervals = (periods ?? [])
+      .filter((p) => todayPeriods.has(p.period_number))
+      .map((p) => ({
+        start: new Date(`${todayKey}T${p.start_time}`).getTime(),
+        end: new Date(`${todayKey}T${p.end_time}`).getTime(),
+      }))
+      .filter((iv) => Number.isFinite(iv.start) && Number.isFinite(iv.end) && iv.end > iv.start);
+    const todayExtra = (extraLogs ?? [])
+      .filter((e) => e.study_date === todayKey)
+      .map((e) => ({ startedAt: e.started_at, endedAt: e.ended_at }));
+    const todayAway = [
+      ...(outings ?? [])
+        .filter((o) => toLocalDateKey(o.started_at) === todayKey)
+        .map((o) => ({ startedAt: o.started_at, endedAt: o.ended_at })),
+      ...(naps ?? [])
+        .filter((n) => n.nap_date === todayKey)
+        .map((n) => ({ startedAt: n.started_at, endedAt: n.ended_at })),
+    ];
+    const seconds = liveStudySecondsFromSchedule(classIntervals, presence, todayExtra, todayAway, Date.now());
+    return Math.round(seconds / 60);
+  }, [weekSchedule, periods, attendance, extraLogs, outings, naps, todayKey]);
 
   const days = useMemo(() => {
     const start = startOfWeek(startOfMonth(month));
@@ -143,7 +181,7 @@ export function ActivityCalendar({ studentId }: Props) {
           const isSelected = key === selectedKey;
           const isToday = isSameDay(day, new Date());
           const tone = act ? attendanceTone(act.attendance) : null;
-          const studyMin = studyMap.get(key) ?? 0;
+          const studyMin = key === todayKey ? todayLiveMinutes : studyMap.get(key) ?? 0;
 
           return (
             <button
