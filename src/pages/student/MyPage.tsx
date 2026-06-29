@@ -4,6 +4,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMyProfileQuery, useMyRequestLogsQuery, useSubmitRequestLogMutation, useStudentNotificationsQuery, useMarkStudentNotificationReadMutation } from '@/features/mypage/hooks';
 import { useAttendanceRecordsQuery } from '@/features/attendance/hooks';
 import { computeAttendanceStats } from '@/features/attendance/stats';
+import { useAllExtraStudyQuery } from '@/features/extra-study/hooks';
+import { sumExtraStudyMinutes } from '@/features/extra-study/api';
 import { usePenaltyRecordsQuery } from '@/features/penalty/hooks';
 import { computeRiskLevel } from '@/features/penalty/risk';
 import { PENALTY_REASON_LABEL, type PenaltyReasonCode } from '@/constants/penaltyRules';
@@ -59,9 +61,14 @@ export default function MyPage() {
   };
   const closeModal = () => setModalKind(null);
 
+  const { data: extraStudyLogs } = useAllExtraStudyQuery(studentId);
   const allRecords = attendanceRecords ?? [];
   const monthRecords = allRecords.filter((r) => isSameMonth(new Date(r.classDate), new Date()));
-  const stats = computeAttendanceStats(allRecords, monthRecords);
+  const stats = computeAttendanceStats(
+    allRecords,
+    monthRecords,
+    sumExtraStudyMinutes(extraStudyLogs ?? [])
+  );
   const riskLevel = profile ? computeRiskLevel(profile.currentPenaltyPoints) : null;
 
   const PENALTY_THRESHOLD = 15;

@@ -18,6 +18,9 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { CurrentPeriodCard } from '@/components/schedule/CurrentPeriodCard';
 import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
 import { StudentStatusBadge } from '@/components/schedule/StudentStatusBadge';
+import { ExtraStudyCard } from '@/features/extra-study/components/ExtraStudyCard';
+import { useOngoingOutingQuery } from '@/features/outing/hooks';
+import { useTodayNapQuery } from '@/features/powernap/hooks';
 
 const QUICK_LINKS = [
   { to: STUDENT_PATHS.outing, label: '외출' },
@@ -38,6 +41,9 @@ export default function DashboardPage() {
   const { data: weekSchedule } = useWeeklyScheduleQuery(studentId, weekStartDate);
 
   const scheduleStatus = useScheduleStatus(periods, now);
+  const { data: ongoingOuting } = useOngoingOutingQuery(studentId);
+  const { data: todayNap } = useTodayNapQuery(studentId);
+  const isBusyWithOtherActivity = Boolean(ongoingOuting) || Boolean(todayNap && todayNap.status !== 'completed');
 
   // 오늘 일정은 본인이 신청한 교시만 표시한다 (전체 운영 교시 X).
   const todayPeriodNumbers = useMemo(() => {
@@ -77,6 +83,13 @@ export default function DashboardPage() {
 
       {/* 현재 진행 중 + 남은 시간 + 다음 일정 */}
       <CurrentPeriodCard status={scheduleStatus} upcomingAlert={scheduleStatus.upcomingClassAlert} />
+
+      {/* 교시외공부 (쉬는시간/식사시간 등 비수업 시간에만 노출) */}
+      <ExtraStudyCard
+        studentId={studentId}
+        currentSlot={scheduleStatus.currentSlot}
+        disabled={isBusyWithOtherActivity}
+      />
 
       {/* 통계 */}
       <div className="grid grid-cols-2 gap-3">

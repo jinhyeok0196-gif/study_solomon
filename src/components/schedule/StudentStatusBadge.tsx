@@ -1,6 +1,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useOngoingOutingQuery } from '@/features/outing/hooks';
 import { useTodayNapQuery } from '@/features/powernap/hooks';
+import { useOngoingExtraStudyQuery } from '@/features/extra-study/hooks';
 import type { ScheduleSlot } from '@/hooks/useScheduleStatus';
 import { cn } from '@/lib/utils';
 
@@ -13,6 +14,7 @@ export function StudentStatusBadge({ currentSlot }: Props) {
   const studentId = user!.id;
   const { data: outing } = useOngoingOutingQuery(studentId);
   const { data: nap } = useTodayNapQuery(studentId);
+  const { data: extraStudy } = useOngoingExtraStudyQuery(studentId);
 
   let icon = '🟢';
   let label = '공부 중';
@@ -27,6 +29,11 @@ export function StudentStatusBadge({ currentSlot }: Props) {
     icon = '🚶';
     label = '외출 중';
     colorClass = 'bg-orange-50 text-orange-700 border-orange-200';
+  } else if (extraStudy) {
+    // 교시외공부 진행 중 → 비수업 시간이어도 '공부 중'
+    icon = '📖';
+    label = '공부 중';
+    colorClass = 'bg-green-50 text-green-700 border-green-200';
   } else if (currentSlot?.category === 'meal') {
     icon = '🍽';
     label = '식사 시간';

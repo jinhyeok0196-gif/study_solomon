@@ -73,13 +73,29 @@ interface AttendanceRow {
   status: string;
 }
 
-export function deriveStatus(student: MonitorStudentRow): SeatStatus {
+interface ExtraStudyRow {
+  id: string;
+  student_id: string;
+  started_at: string;
+  status: string;
+}
+
+export function deriveStatus(student: MonitorStudentRow, currentSlotCategory?: string): SeatStatus {
   if (student.membershipStatus !== 'active') return 'inactive';
   if (student.ongoingOuting) return 'outing';
   if (student.ongoingPowerNap) return 'power_nap';
+  // 교시외공부 진행 중 → 비수업 시간이어도 공부중
+  if (student.ongoingExtraStudy) return 'studying';
+
   const statuses = student.todayAttendances.map((a) => a.status);
-  if (statuses.includes('present')) return 'studying';
-  if (statuses.includes('late') && !statuses.includes('present')) return 'late';
+  const hasPresent = statuses.includes('present');
+  const hasLate = statuses.includes('late');
+
+  if (hasPresent || hasLate) {
+    // 등원한 상태. 단, 수업 교시가 아니면(쉬는/식사/자율 등) '휴식중'으로 표시.
+    if (currentSlotCategory !== 'class') return 'resting';
+    return hasPresent ? 'studying' : 'late';
+  }
   if (statuses.some((s) => s === 'absent' || s === 'excused_absence')) return 'absent';
   return 'not_arrived';
 }
@@ -87,7 +103,7 @@ export function deriveStatus(student: MonitorStudentRow): SeatStatus {
 export async function fetchMonitorStudents(): Promise<MonitorStudentRow[]> {
   const today = todayDateString();
 
-  const [studentsRes, outingRes, napRes, attendanceRes] = await Promise.all([
+  const [studentsRes, outingRes, napRes, attendanceRes, extraStudyRes] = await Promise.all([
     supabase
       .from('student_profiles')
       .select('id, seat_number, membership_status, current_penalty_points, warning_count, users(name)')
@@ -105,18 +121,26 @@ export async function fetchMonitorStudents(): Promise<MonitorStudentRow[]> {
       .from('attendance_records')
       .select('student_id, period_number, status')
       .eq('class_date', today),
+    supabase
+      .from('extra_study_logs')
+      .select('id, student_id, started_at, status')
+      .eq('status', 'ongoing'),
   ]);
 
   if (studentsRes.error) throw studentsRes.error;
   if (outingRes.error) throw outingRes.error;
   if (napRes.error) throw napRes.error;
   if (attendanceRes.error) throw attendanceRes.error;
+  if (extraStudyRes.error) throw extraStudyRes.error;
 
   const outingMap = new Map(
     (outingRes.data as unknown as OutingRow[]).map((o) => [o.student_id, o])
   );
   const napMap = new Map(
     (napRes.data as unknown as PowerNapRow[]).map((n) => [n.student_id, n])
+  );
+  const extraStudyMap = new Map(
+    (extraStudyRes.data as unknown as ExtraStudyRow[]).map((e) => [e.student_id, e])
   );
   const attendanceMap = new Map<string, AttendanceRow[]>();
   (attendanceRes.data as unknown as AttendanceRow[]).forEach((a) => {
@@ -130,6 +154,7 @@ export async function fetchMonitorStudents(): Promise<MonitorStudentRow[]> {
     .map((s) => {
       const outing = outingMap.get(s.id);
       const nap = napMap.get(s.id);
+      const extraStudy = extraStudyMap.get(s.id);
       return {
         id: s.id,
         seatNumber: s.seat_number!,
@@ -142,6 +167,9 @@ export async function fetchMonitorStudents(): Promise<MonitorStudentRow[]> {
           : undefined,
         ongoingPowerNap: nap
           ? { id: nap.id, startedAt: nap.started_at, plannedEndAt: nap.planned_end_at }
+          : undefined,
+        ongoingExtraStudy: extraStudy
+          ? { id: extraStudy.id, startedAt: extraStudy.started_at }
           : undefined,
         todayAttendances: (attendanceMap.get(s.id) ?? []).map((a) => ({
           periodNumber: a.period_number,

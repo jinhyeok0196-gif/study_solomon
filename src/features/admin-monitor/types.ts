@@ -16,6 +16,7 @@ export type SeatStatus =
   | 'not_arrived'  // 미등원 (학생 배정됨, 당일 출결 없음)
   | 'inactive'     // 비활성 회원
   | 'studying'     // 공부중
+  | 'resting'      // 휴식중 (쉬는시간/식사시간 등 비수업 시간)
   | 'outing'       // 외출중
   | 'power_nap'    // 파워냅
   | 'late'         // 지각
@@ -57,6 +58,13 @@ export const SEAT_STATUS_CONFIG: Record<SeatStatus, SeatStatusConfig> = {
     label: '공부중',
     emoji: '🟢',
     textClass: 'text-green-700',
+  },
+  resting: {
+    cardClass: 'bg-amber-50 border-amber-200',
+    dotClass: 'bg-amber-400',
+    label: '휴식중',
+    emoji: '☕',
+    textClass: 'text-amber-700',
   },
   outing: {
     cardClass: 'bg-orange-50 border-orange-300',
@@ -103,6 +111,10 @@ export interface MonitorStudentRow {
     id: string;
     startedAt: string;
     plannedEndAt: string;
+  };
+  ongoingExtraStudy?: {
+    id: string;
+    startedAt: string;
   };
   todayAttendances: Array<{ periodNumber: number; status: string }>;
 }

@@ -16,20 +16,24 @@ function makeRecord(overrides: Partial<AttendanceRecordWithPeriod>): AttendanceR
 }
 
 describe('recordStudyMinutes', () => {
-  it('uses actual check-in/out duration when both are recorded', () => {
+  it('counts the full period duration for present (ignores check-in/out span so breaks/meals are excluded)', () => {
     const record = makeRecord({
+      status: 'present',
       checkedInAt: '2026-06-01T09:00:00Z',
-      checkedOutAt: '2026-06-01T09:50:00Z',
+      checkedOutAt: '2026-06-01T20:00:00Z', // 하원까지 전체 구간이어도 교시 시간(80분)만 집계
     });
-    expect(recordStudyMinutes(record)).toBe(50);
+    expect(recordStudyMinutes(record)).toBe(80);
   });
 
-  it('falls back to the full period duration when present without check times', () => {
+  it('counts the period duration for present and late', () => {
     expect(recordStudyMinutes(makeRecord({ status: 'present' }))).toBe(80);
+    expect(recordStudyMinutes(makeRecord({ status: 'late' }))).toBe(80);
   });
 
-  it('returns 0 for absences', () => {
+  it('returns 0 for absences and early leave (skipped periods)', () => {
     expect(recordStudyMinutes(makeRecord({ status: 'absent' }))).toBe(0);
+    expect(recordStudyMinutes(makeRecord({ status: 'early_leave' }))).toBe(0);
+    expect(recordStudyMinutes(makeRecord({ status: 'excused_absence' }))).toBe(0);
   });
 });
 
@@ -50,6 +54,12 @@ describe('computeAttendanceStats', () => {
     expect(stats.absenceRate).toBe(0.5);
     expect(stats.lateCount).toBe(1);
     expect(stats.cumulativeStudyMinutes).toBe(80 * 3);
+  });
+
+  it('adds extra study minutes to cumulative study time', () => {
+    const records = [makeRecord({ status: 'present' })];
+    const stats = computeAttendanceStats(records, records, 45);
+    expect(stats.cumulativeStudyMinutes).toBe(80 + 45);
   });
 
   it('handles zero records without dividing by zero', () => {

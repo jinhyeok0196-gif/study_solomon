@@ -2,6 +2,8 @@ import { isSameMonth } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
 import { useAttendanceRecordsQuery } from '@/features/attendance/hooks';
 import { computeAttendanceStats } from '@/features/attendance/stats';
+import { useAllExtraStudyQuery } from '@/features/extra-study/hooks';
+import { sumExtraStudyMinutes } from '@/features/extra-study/api';
 import { ATTENDANCE_STATUS_LABEL } from '@/features/attendance/labels';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -15,6 +17,7 @@ function formatHours(minutes: number): string {
 export default function AttendancePage() {
   const { user } = useAuth();
   const { data: records, isLoading } = useAttendanceRecordsQuery(user!.id);
+  const { data: extraStudyLogs } = useAllExtraStudyQuery(user!.id);
 
   if (isLoading) {
     return (
@@ -27,7 +30,11 @@ export default function AttendancePage() {
   const allRecords = records ?? [];
   const now = new Date();
   const monthRecords = allRecords.filter((record) => isSameMonth(new Date(record.classDate), now));
-  const stats = computeAttendanceStats(allRecords, monthRecords);
+  const stats = computeAttendanceStats(
+    allRecords,
+    monthRecords,
+    sumExtraStudyMinutes(extraStudyLogs ?? [])
+  );
 
   return (
     <div className="flex flex-col gap-4 p-4">

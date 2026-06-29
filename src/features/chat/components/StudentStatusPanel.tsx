@@ -8,6 +8,8 @@ import { useStudentDetailQuery } from '@/features/admin-students/hooks';
 import { usePenaltyProfileQuery, usePenaltyRecordsQuery } from '@/features/penalty/hooks';
 import { useOngoingOutingQuery, useOutingMutations } from '@/features/outing/hooks';
 import { useTodayNapQuery, useNapMutations } from '@/features/powernap/hooks';
+import { useOngoingExtraStudyQuery, useTodayExtraStudyQuery } from '@/features/extra-study/hooks';
+import { sumExtraStudyMinutes } from '@/features/extra-study/api';
 import { useCreatePenaltyMutation } from '@/features/admin-penalty/hooks';
 import { useUpsertAttendanceMutation } from '@/features/admin-attendance/hooks';
 import { useSendMessageMutation } from '@/features/chat/hooks';
@@ -63,10 +65,13 @@ function padTwo(n: number): string {
 function computeStudentStatus(
   hasOngoingOuting: boolean,
   hasOngoingNap: boolean,
-  currentSlotCategory: string | undefined
+  currentSlotCategory: string | undefined,
+  hasOngoingExtraStudy: boolean
 ): { label: string; color: string; emoji: string } {
   if (hasOngoingOuting) return { label: '외출', color: 'bg-orange-100 text-orange-700', emoji: '🚶' };
   if (hasOngoingNap) return { label: '파워냅', color: 'bg-purple-100 text-purple-700', emoji: '😴' };
+  // 교시외공부 진행 중 → 비수업 시간이어도 '공부 중'
+  if (hasOngoingExtraStudy) return { label: '공부 중', color: 'bg-green-100 text-green-700', emoji: '📖' };
   if (!currentSlotCategory) return { label: '자유시간', color: 'bg-gray-100 text-gray-600', emoji: '⏸' };
   switch (currentSlotCategory) {
     case 'class':
@@ -122,6 +127,8 @@ export function StudentStatusPanel({ studentId, roomId, className }: Props) {
   const { data: penaltyRecords } = usePenaltyRecordsQuery(studentId);
   const { data: ongoingOuting } = useOngoingOutingQuery(studentId);
   const { data: todayNap } = useTodayNapQuery(studentId);
+  const { data: ongoingExtraStudy } = useOngoingExtraStudyQuery(studentId);
+  const { data: todayExtraStudy } = useTodayExtraStudyQuery(studentId);
 
   const { data: periods } = usePeriods();
   const now = useCurrentTime(15000);
@@ -168,7 +175,8 @@ export function StudentStatusPanel({ studentId, roomId, className }: Props) {
   const status = computeStudentStatus(
     !!ongoingOuting,
     !!todayNap && todayNap.status === 'ongoing',
-    scheduleStatus.currentSlot?.category
+    scheduleStatus.currentSlot?.category,
+    !!ongoingExtraStudy
   );
 
   const outingMinutes = (todayBathroom ?? []).reduce(
@@ -176,10 +184,18 @@ export function StudentStatusPanel({ studentId, roomId, className }: Props) {
     0
   );
   const napMinutes = todayNap ? durationMinutes(todayNap.started_at, todayNap.ended_at) : 0;
-  const studyMinutes = (todayAttendance ?? []).reduce((sum, a) => {
-    if (!a.checked_in_at) return sum;
-    return sum + durationMinutes(a.checked_in_at, a.checked_out_at);
+  // 순공시간 = 출석한 수업 교시 시간 + 교시외공부 시간 (쉬는/식사시간 제외)
+  const periodMinutesMap = new Map<number, number>();
+  (periods ?? []).forEach((p) => {
+    const [sh, sm] = p.start_time.slice(0, 5).split(':').map(Number);
+    const [eh, em] = p.end_time.slice(0, 5).split(':').map(Number);
+    periodMinutesMap.set(p.period_number, Math.max(0, eh * 60 + em - (sh * 60 + sm)));
+  });
+  const periodStudyMinutes = (todayAttendance ?? []).reduce((sum, a) => {
+    if (a.status !== 'present' && a.status !== 'late') return sum;
+    return sum + (periodMinutesMap.get(a.period_number) ?? 0);
   }, 0);
+  const studyMinutes = periodStudyMinutes + sumExtraStudyMinutes(todayExtraStudy ?? []);
 
   const [penaltyForm, setPenaltyForm] = useState<{ reasonCode: PenaltyReasonCode | ''; desc: string }>({
     reasonCode: '',

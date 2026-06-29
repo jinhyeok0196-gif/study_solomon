@@ -26,6 +26,7 @@ export function useMonitorRealtime() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bathroom_logs' }, invalidateAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'power_nap_logs' }, invalidateAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_records' }, invalidateStudents)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'extra_study_logs' }, invalidateStudents)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'penalty_records' }, () => {
         qc.invalidateQueries({ queryKey: EVENT_LOG_KEY });
       })

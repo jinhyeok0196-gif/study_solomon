@@ -19,6 +19,7 @@ Supabase(PostgreSQL) 기반. 모든 테이블은 `public` 스키마에 위치합
 | `leave_requests` | 조퇴 신청 |
 | `bathroom_logs` | 외출 시작/복귀 기록 |
 | `power_nap_logs` | 파워냅 기록 |
+| `extra_study_logs` | 교시외공부(쉬는/식사시간 등 비수업 시간 공부) 시작/종료 기록 |
 | `penalty_records` | 벌점 부여/차감 이력 |
 | `warning_records` | 경고·퇴원 이력 |
 | `notifications` | 실시간 알림 |
@@ -161,6 +162,23 @@ is_unauthorized  boolean   DEFAULT false
 created_at       timestamptz
 UNIQUE (student_id, nap_date)  -- 1일 1회 제한
 ```
+
+### extra_study_logs (교시외공부)
+```sql
+id          uuid      PK
+student_id  uuid      -- student_profiles.id 참조
+study_date  date      DEFAULT current_date
+started_at  timestamptz  DEFAULT now()
+ended_at    timestamptz  NULL
+status      text      -- 'ongoing' | 'completed'
+created_at  timestamptz
+UNIQUE (student_id) WHERE status = 'ongoing'  -- 동시 1건 제한
+```
+쉬는시간/식사시간 등 "수업 교시가 아닌" 시간에 공부한 경우 학생이 직접 시작/종료(스톱워치)로 기록.
+순공시간 계산: **출석한 수업 교시 시간(present/late) + extra_study_logs 합산**. 쉬는/식사시간은
+교시가 아니므로 제외되고, 체크인~체크아웃 전체 구간을 세지 않으므로 교시 사이 시간도 포함되지 않음.
+수업 교시가 시작되면 진행 중 세션은 클라이언트에서 자동 종료(중복 집계 방지). 관제 화면에서는
+진행 중이면 '공부중', 비수업 시간에 미진행이면 '휴식중'으로 표시.
 
 ### penalty_records
 ```sql
@@ -326,6 +344,7 @@ public.current_user_role() -- 현재 사용자 role 반환
 | `leave_requests` | 본인만 | 본인만 | 전체 |
 | `bathroom_logs` | 본인만 | 본인만 | 전체 |
 | `power_nap_logs` | 본인만 | 본인만 | 전체 |
+| `extra_study_logs` | 본인만 | 본인만 | 전체 |
 | `penalty_records` | 본인만 | X | 전체 |
 | `warning_records` | 본인만 | X | 전체 |
 | `notifications` | 본인 또는 role=student | X | 전체 |
@@ -344,6 +363,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE
   notifications,
   bathroom_logs,
   power_nap_logs,
+  extra_study_logs,
   attendance_records,
   chat_messages,
   message_reads,
@@ -409,4 +429,5 @@ ALTER PUBLICATION supabase_realtime ADD TABLE
 20260701_chat_replica_identity.sql         -- Realtime REPLICA IDENTITY
 20260702_seat_layouts.sql                  -- 좌석 배치 + student_profiles.seat_number
 20260629120000_qr_checkin.sql              -- QR 등하원 체크인 (qr_config + checkin_by_qr 등)
+20260629140000_extra_study_logs.sql        -- 교시외공부 기록 + 순공시간 정책
 ```

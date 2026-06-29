@@ -83,15 +83,16 @@ export default function MonitorPage() {
   const [assignSeat, setAssignSeat] = useState<{ seatNumber: number; label: string } | null>(null);
   const { unassign } = useSeatAssignMutations();
 
+  const currentSlotCategory = scheduleStatus.currentSlot?.category;
   const seatDataList: SeatData[] = useMemo(() => {
     if (!seatLayouts) return [];
     const studentMap = new Map((monitorStudents ?? []).map((s) => [s.seatNumber, s]));
     return seatLayouts.map((seat) => {
       const student = studentMap.get(seat.seatNumber) ?? null;
-      const status = student ? deriveStatus(student) : 'empty';
+      const status = student ? deriveStatus(student, currentSlotCategory) : 'empty';
       return { seat, student, status };
     });
-  }, [seatLayouts, monitorStudents]);
+  }, [seatLayouts, monitorStudents, currentSlotCategory]);
 
   const handleSeatClick = useCallback(
     (studentId: string | null, seatNumber: number) => {
