@@ -64,6 +64,58 @@ export function awayDeductionMinutes(
   return Math.round(total);
 }
 
+// ── 실시간(초 단위) 순공시간 ──────────────────────────────────────────────
+// 오늘처럼 "진행 중인" 날에 사용. 진행 중인 교시는 교시 전체가 아니라 '지금까지
+// 경과한 시간'만 세고, 그 구간과 겹치는 외출/파워냅(진행 중이면 현재 시각까지)을
+// 차감한다. 교시외공부도 진행 중이면 현재 시각까지 더한다. → 교시 중간에 확인해도
+// '지금 이 순간'의 진짜 순공시간이 초 단위로 나온다.
+export interface LiveStudyLog {
+  startedAt: string;
+  endedAt: string | null;
+}
+
+export function liveStudySeconds(
+  records: AttendanceRecordWithPeriod[],
+  extraLogs: LiveStudyLog[],
+  awayLogs: AwayLog[],
+  nowMs: number
+): number {
+  // 출석(present/late) 교시의 '경과 구간' [start, min(end, now)] — 아직 안 끝난 교시는 현재까지만.
+  const intervals: StudyInterval[] = [];
+  for (const r of records) {
+    if (!STUDY_STATUSES.has(r.status)) continue;
+    const start = new Date(`${r.classDate}T${r.periodStartTime}`).getTime();
+    const end = new Date(`${r.classDate}T${r.periodEndTime}`).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    const clampedEnd = Math.min(end, nowMs);
+    if (clampedEnd > start) intervals.push({ start, end: clampedEnd });
+  }
+
+  let seconds = 0;
+  for (const iv of intervals) seconds += (iv.end - iv.start) / 1000;
+
+  // 교시 중 외출/파워냅 차감 (진행 중이면 현재 시각까지)
+  for (const log of awayLogs) {
+    const ls = new Date(log.startedAt).getTime();
+    const le = log.endedAt ? new Date(log.endedAt).getTime() : nowMs;
+    if (!Number.isFinite(ls) || le <= ls) continue;
+    for (const iv of intervals) {
+      const s = Math.max(ls, iv.start);
+      const e = Math.min(le, iv.end);
+      if (e > s) seconds -= (e - s) / 1000;
+    }
+  }
+
+  // 교시외공부(비수업 시간 공부) 가산 (진행 중이면 현재 시각까지)
+  for (const log of extraLogs) {
+    const s = new Date(log.startedAt).getTime();
+    const e = log.endedAt ? new Date(log.endedAt).getTime() : nowMs;
+    if (Number.isFinite(s) && e > s) seconds += (e - s) / 1000;
+  }
+
+  return Math.max(0, Math.floor(seconds));
+}
+
 export interface AttendanceStats {
   totalRecords: number;
   attendanceRate: number;

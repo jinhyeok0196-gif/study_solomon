@@ -18,7 +18,8 @@ import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
 import { StudentStatusBadge } from '@/components/schedule/StudentStatusBadge';
 import { ExtraStudyCard } from '@/features/extra-study/components/ExtraStudyCard';
 import { ActivityCalendar } from '@/features/activity-calendar/components/ActivityCalendar';
-import { buildDailyStudyMinutes } from '@/features/activity-calendar/aggregate';
+import { toLocalDateKey } from '@/features/activity-calendar/aggregate';
+import { liveStudySeconds } from '@/features/attendance/stats';
 import { useOngoingOutingQuery, useAllOutingsQuery } from '@/features/outing/hooks';
 import { useTodayNapQuery, useRecentNapsQuery } from '@/features/powernap/hooks';
 import { useAllExtraStudyQuery } from '@/features/extra-study/hooks';
@@ -71,12 +72,27 @@ export default function DashboardPage() {
   const allRecords = attendanceRecords ?? [];
   const risk = penaltyProfile ? computeRiskLevel(penaltyProfile.currentPenaltyPoints) : null;
 
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const studyMap = useMemo(
-    () => buildDailyStudyMinutes(allRecords, extraLogs ?? [], outingLogs ?? [], napLogs ?? []),
-    [allRecords, extraLogs, outingLogs, napLogs]
-  );
-  const todayStudyMinutes = studyMap.get(todayKey) ?? 0;
+  const todayKey = toLocalDateKey(now.toISOString());
+  // 오늘 순공시간은 매초 실시간 계산한다 (now가 의존성에 있어 1초마다 재계산).
+  const todayStudySeconds = useMemo(() => {
+    const todayRecords = allRecords.filter((r) => r.classDate === todayKey);
+    const todayExtra = (extraLogs ?? [])
+      .filter((e) => e.study_date === todayKey)
+      .map((e) => ({ startedAt: e.started_at, endedAt: e.ended_at }));
+    const todayAway = [
+      ...(outingLogs ?? [])
+        .filter((o) => toLocalDateKey(o.started_at) === todayKey)
+        .map((o) => ({ startedAt: o.started_at, endedAt: o.ended_at })),
+      ...(napLogs ?? [])
+        .filter((n) => n.nap_date === todayKey)
+        .map((n) => ({ startedAt: n.started_at, endedAt: n.ended_at })),
+    ];
+    return liveStudySeconds(todayRecords, todayExtra, todayAway, now.getTime());
+  }, [allRecords, extraLogs, outingLogs, napLogs, todayKey, now]);
+
+  const studyH = Math.floor(todayStudySeconds / 3600);
+  const studyM = Math.floor((todayStudySeconds % 3600) / 60);
+  const studyS = todayStudySeconds % 60;
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -103,8 +119,8 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 gap-3">
         <Card>
           <p className="text-xs text-gray-500">오늘 순공시간</p>
-          <p className="text-2xl font-bold text-gray-900">
-            {Math.floor(todayStudyMinutes / 60)}시간 {todayStudyMinutes % 60}분
+          <p className="text-2xl font-bold text-gray-900 tabular-nums">
+            {studyH}시간 {studyM}분 {String(studyS).padStart(2, '0')}초
           </p>
         </Card>
         <Card>

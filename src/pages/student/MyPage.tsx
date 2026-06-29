@@ -1,18 +1,20 @@
 import { useMemo, useState } from 'react';
 import { isSameMonth, isSameWeek } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
+import { useCurrentTime } from '@/hooks/useCurrentTime';
 import { useMyProfileQuery, useMyRequestLogsQuery, useSubmitRequestLogMutation, useStudentNotificationsQuery, useMarkStudentNotificationReadMutation } from '@/features/mypage/hooks';
 import { useAttendanceRecordsQuery } from '@/features/attendance/hooks';
 import {
   attendedIntervalsFromRecords,
   awayDeductionMinutes,
   computeAttendanceStats,
+  liveStudySeconds,
 } from '@/features/attendance/stats';
 import { useAllExtraStudyQuery } from '@/features/extra-study/hooks';
 import { sumExtraStudyMinutes } from '@/features/extra-study/api';
 import { useAllOutingsQuery } from '@/features/outing/hooks';
 import { useRecentNapsQuery } from '@/features/powernap/hooks';
-import { buildDailyStudyMinutes } from '@/features/activity-calendar/aggregate';
+import { buildDailyStudyMinutes, toLocalDateKey } from '@/features/activity-calendar/aggregate';
 import { cn } from '@/lib/utils';
 import { usePenaltyRecordsQuery } from '@/features/penalty/hooks';
 import { computeRiskLevel } from '@/features/penalty/risk';
@@ -44,6 +46,7 @@ function fmt(dateStr: string | null) {
 export default function MyPage() {
   const { user } = useAuth();
   const studentId = user!.id;
+  const now = useCurrentTime(1000);
 
   const { data: profile, isLoading, isError } = useMyProfileQuery(studentId);
   const { data: requestLogs } = useMyRequestLogsQuery(studentId);
@@ -89,28 +92,51 @@ export default function MyPage() {
   );
   const riskLevel = profile ? computeRiskLevel(profile.currentPenaltyPoints) : null;
 
-  // 순공시간: 일/주간/월간/누적 선택
+  // 순공시간: 일/주간/월간/누적 선택. 모두 초 단위, 오늘은 매초 실시간 반영.
   const [studyRange, setStudyRange] = useState<'day' | 'week' | 'month' | 'all'>('day');
+  // 과거 날짜는 확정값(분 단위), 오늘은 아래에서 실시간 초 단위로 덮어쓴다.
   const studyMap = useMemo(
     () => buildDailyStudyMinutes(allRecords, extraStudyLogs ?? [], outingLogs ?? [], napLogs ?? []),
     [allRecords, extraStudyLogs, outingLogs, napLogs]
   );
+  // 합계는 초 단위로 누적한다. (오늘분은 liveStudySeconds로 실시간 계산)
   const studyTotals = useMemo(() => {
-    const now = new Date();
-    const todayKey = now.toISOString().slice(0, 10);
-    let day = 0,
-      week = 0,
-      month = 0,
-      all = 0;
-    for (const [k, v] of studyMap) {
+    const todayKey = toLocalDateKey(now.toISOString());
+
+    const todayRecords = allRecords.filter((r) => r.classDate === todayKey);
+    const todayExtra = (extraStudyLogs ?? [])
+      .filter((e) => e.study_date === todayKey)
+      .map((e) => ({ startedAt: e.started_at, endedAt: e.ended_at }));
+    const todayAway = [
+      ...(outingLogs ?? [])
+        .filter((o) => toLocalDateKey(o.started_at) === todayKey)
+        .map((o) => ({ startedAt: o.started_at, endedAt: o.ended_at })),
+      ...(napLogs ?? [])
+        .filter((n) => n.nap_date === todayKey)
+        .map((n) => ({ startedAt: n.started_at, endedAt: n.ended_at })),
+    ];
+    const todaySeconds = liveStudySeconds(todayRecords, todayExtra, todayAway, now.getTime());
+
+    // 오늘은 항상 현재 주·월·누적에 포함된다.
+    let day = todaySeconds,
+      week = todaySeconds,
+      month = todaySeconds,
+      all = todaySeconds;
+    for (const [k, vMin] of studyMap) {
+      if (k === todayKey) continue; // 오늘분은 실시간 초로 이미 합산
+      const vSec = vMin * 60;
       const d = new Date(`${k}T00:00:00`);
-      all += v;
-      if (k === todayKey) day += v;
-      if (isSameWeek(d, now, { weekStartsOn: 1 })) week += v;
-      if (isSameMonth(d, now)) month += v;
+      all += vSec;
+      if (isSameWeek(d, now, { weekStartsOn: 1 })) week += vSec;
+      if (isSameMonth(d, now)) month += vSec;
     }
     return { day, week, month, all };
-  }, [studyMap]);
+  }, [studyMap, allRecords, extraStudyLogs, outingLogs, napLogs, now]);
+
+  const rangeSeconds = studyTotals[studyRange];
+  const rangeH = Math.floor(rangeSeconds / 3600);
+  const rangeM = Math.floor((rangeSeconds % 3600) / 60);
+  const rangeS = rangeSeconds % 60;
 
   const PENALTY_THRESHOLD = 15;
   const nextWarningAt =
@@ -291,11 +317,13 @@ export default function MyPage() {
               </button>
             ))}
           </div>
-          <p className="text-center text-3xl font-bold text-gray-900">
-            {Math.floor(studyTotals[studyRange] / 60)}
+          <p className="text-center text-3xl font-bold text-gray-900 tabular-nums">
+            {rangeH}
             <span className="text-lg font-semibold text-gray-500">시간 </span>
-            {studyTotals[studyRange] % 60}
-            <span className="text-lg font-semibold text-gray-500">분</span>
+            {rangeM}
+            <span className="text-lg font-semibold text-gray-500">분 </span>
+            {String(rangeS).padStart(2, '0')}
+            <span className="text-lg font-semibold text-gray-500">초</span>
           </p>
         </Card>
       </section>
