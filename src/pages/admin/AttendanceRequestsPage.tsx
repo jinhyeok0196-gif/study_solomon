@@ -7,6 +7,7 @@ import {
 import type { AttendanceRequestRow } from '@/features/admin-attendance-requests/api';
 import { REQUEST_KIND_LABEL, REQUEST_STATUS_LABEL } from '@/features/requests/types';
 import { usePeriods, formatPeriodNumbers } from '@/hooks/usePeriods';
+import { QuickPenaltyGrant } from '@/features/admin-penalty/components/QuickPenaltyGrant';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -142,6 +143,9 @@ export default function AttendanceRequestsPage() {
                     {req.status === 'approved' ? '승인 취소' : '거절 취소'}
                   </Button>
                 )}
+              </div>
+              <div className="mt-3 border-t border-gray-100 pt-2">
+                <QuickPenaltyGrant studentId={req.studentId} />
               </div>
             </Card>
           ))}

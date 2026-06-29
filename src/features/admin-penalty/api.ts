@@ -63,3 +63,24 @@ export async function createPenaltyRecord(input: CreatePenaltyInput): Promise<vo
   });
   if (error) throw error;
 }
+
+export interface ManualPenaltyInput {
+  studentId: string;
+  points: number; // 1~10
+  description?: string; // 선택 사유
+  createdBy: string;
+}
+
+/** 임의 점수(1~10) 직접 부여. reason_code는 '관리자 부여'로 기록(트리거가 points로 누적/경고 처리). */
+export async function createManualPenalty(input: ManualPenaltyInput): Promise<void> {
+  const points = Math.max(1, Math.min(10, Math.round(input.points)));
+  const { error } = await supabase.from('penalty_records').insert({
+    student_id: input.studentId,
+    reason_code: '관리자 부여',
+    adjustment_type: 'add',
+    points,
+    description: input.description?.trim() || null,
+    created_by: input.createdBy,
+  });
+  if (error) throw error;
+}

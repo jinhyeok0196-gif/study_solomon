@@ -4,6 +4,7 @@ import type { RequestKind } from '@/features/requests/types';
 export interface AttendanceRequestRow {
   id: string;
   kind: RequestKind; // 'absence' | 'leave'
+  studentId: string;
   studentName: string;
   requestDate: string;
   periodNumbers: number[];
@@ -15,6 +16,7 @@ export interface AttendanceRequestRow {
 
 interface Row {
   id: string;
+  student_id: string;
   request_date: string;
   period_numbers: number[];
   reason: string;
@@ -25,12 +27,13 @@ interface Row {
 }
 
 const SELECT =
-  'id, request_date, period_numbers, reason, status, reviewed_at, created_at, student_profiles(users(name))';
+  'id, student_id, request_date, period_numbers, reason, status, reviewed_at, created_at, student_profiles(users(name))';
 
 function mapRow(kind: RequestKind, row: Row): AttendanceRequestRow {
   return {
     id: row.id,
     kind,
+    studentId: row.student_id,
     studentName: row.student_profiles?.users?.name ?? '(알 수 없음)',
     requestDate: row.request_date,
     periodNumbers: row.period_numbers ?? [],

@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createPenaltyRecord, fetchAllPenaltyRecords, type CreatePenaltyInput } from './api';
+import {
+  createManualPenalty,
+  createPenaltyRecord,
+  fetchAllPenaltyRecords,
+  type CreatePenaltyInput,
+  type ManualPenaltyInput,
+} from './api';
 
 export function usePenaltyRecordsFeedQuery() {
   return useQuery({
@@ -15,6 +21,19 @@ export function useCreatePenaltyMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-penalty-records'] });
       queryClient.invalidateQueries({ queryKey: ['admin-students'] });
+    },
+  });
+}
+
+export function useCreateManualPenaltyMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ManualPenaltyInput) => createManualPenalty(input),
+    onSuccess: (_d, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-penalty-records'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-students'] });
+      queryClient.invalidateQueries({ queryKey: ['penalty-profile', vars.studentId] });
+      queryClient.invalidateQueries({ queryKey: ['penalty-records', vars.studentId] });
     },
   });
 }

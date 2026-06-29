@@ -12,6 +12,7 @@ import { useTodayNapQuery, useNapMutations } from '@/features/powernap/hooks';
 import { useOngoingExtraStudyQuery, useTodayExtraStudyQuery } from '@/features/extra-study/hooks';
 import { sumExtraStudyMinutes } from '@/features/extra-study/api';
 import { useCreatePenaltyMutation } from '@/features/admin-penalty/hooks';
+import { QuickPenaltyGrant } from '@/features/admin-penalty/components/QuickPenaltyGrant';
 import { useUpsertAttendanceMutation } from '@/features/admin-attendance/hooks';
 import { useSendMessageMutation } from '@/features/chat/hooks';
 import {
@@ -367,6 +368,9 @@ export function StudentStatusPanel({ studentId, roomId, className }: Props) {
               <span className="font-semibold text-red-500">+{r.points}점</span>
             </div>
           ))}
+          <div className="mt-2 border-t border-gray-100 pt-2">
+            <QuickPenaltyGrant studentId={studentId} />
+          </div>
         </div>
 
         {/* 오늘 시간표 */}
