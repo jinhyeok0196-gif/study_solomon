@@ -48,7 +48,7 @@ export function RequestForm({ kind, studentId, onSubmitted }: RequestFormProps) 
         render={({ field }) => (
           <FormField label="교시" htmlFor="periodNumbers" error={errors.periodNumbers?.message}>
             <div className="flex flex-wrap gap-2">
-              {(periods ?? []).map((period) => {
+              {(periods ?? []).filter((period) => period.is_selectable).map((period) => {
                 const isChecked = field.value.includes(period.period_number);
                 return (
                   <button

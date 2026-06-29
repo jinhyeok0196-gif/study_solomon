@@ -6,6 +6,7 @@ import {
 } from '@/features/admin-attendance-requests/hooks';
 import type { AttendanceRequestRow } from '@/features/admin-attendance-requests/api';
 import { REQUEST_KIND_LABEL, REQUEST_STATUS_LABEL } from '@/features/requests/types';
+import { usePeriods, formatPeriodNumbers } from '@/hooks/usePeriods';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -37,6 +38,7 @@ export default function AttendanceRequestsPage() {
   const adminId = user!.id;
 
   const { data: requests, isLoading } = useAttendanceRequestsQuery();
+  const { data: periods } = usePeriods();
   const review = useReviewAttendanceRequestMutation();
 
   type Action = 'approved' | 'rejected' | 'pending';
@@ -107,9 +109,7 @@ export default function AttendanceRequestsPage() {
                   </div>
                   <p className="mt-1 text-sm text-gray-600">
                     날짜: <span className="font-medium">{fmt(req.requestDate)}</span> · 교시:{' '}
-                    <span className="font-medium">
-                      {req.periodNumbers.length > 0 ? `${req.periodNumbers.join(', ')}교시` : '-'}
-                    </span>
+                    <span className="font-medium">{formatPeriodNumbers(req.periodNumbers, periods)}</span>
                   </p>
                   <p className="mt-0.5 text-sm text-gray-500">사유: {req.reason}</p>
                   <p className="mt-1 text-xs text-gray-400">신청일: {fmt(req.createdAt)}</p>
@@ -159,8 +159,7 @@ export default function AttendanceRequestsPage() {
             <p className="text-sm text-gray-600">
               <span className="font-medium">{target.req.studentName}</span>님의{' '}
               <span className="font-medium">{REQUEST_KIND_LABEL[target.req.kind]} 신청</span>(
-              {fmt(target.req.requestDate)},{' '}
-              {target.req.periodNumbers.length > 0 ? `${target.req.periodNumbers.join(', ')}교시` : '-'})을{' '}
+              {fmt(target.req.requestDate)}, {formatPeriodNumbers(target.req.periodNumbers, periods)})을{' '}
               {target.action === 'pending' ? (
                 <>다시 <span className="font-medium">대기</span> 상태로 되돌리겠습니까?</>
               ) : (

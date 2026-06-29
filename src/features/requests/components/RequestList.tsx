@@ -1,5 +1,6 @@
 import { useMyRequestsQuery, useCancelRequestMutation } from '../hooks';
 import { REQUEST_STATUS_LABEL, type RequestKind } from '../types';
+import { usePeriods, formatPeriodNumbers } from '@/hooks/usePeriods';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -18,6 +19,7 @@ interface RequestListProps {
 
 export function RequestList({ kind, studentId }: RequestListProps) {
   const { data: requests, isLoading } = useMyRequestsQuery(kind, studentId);
+  const { data: periods } = usePeriods();
   const cancelMutation = useCancelRequestMutation(kind, studentId);
 
   if (isLoading) {
@@ -41,7 +43,7 @@ export function RequestList({ kind, studentId }: RequestListProps) {
         >
           <div className="flex items-center justify-between">
             <span className="font-medium text-gray-900">
-              {request.requestDate} · {request.periodNumbers.sort((a, b) => a - b).join(', ')}교시
+              {request.requestDate} · {formatPeriodNumbers(request.periodNumbers, periods)}
             </span>
             <Badge tone={STATUS_TONE[request.status]}>{REQUEST_STATUS_LABEL[request.status]}</Badge>
           </div>

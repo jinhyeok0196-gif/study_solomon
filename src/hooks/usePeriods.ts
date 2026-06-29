@@ -29,6 +29,23 @@ const PLACEHOLDER: PeriodRow[] = [
   { period_number: 23, display_name: '자율학습', label: '자율학습', start_time: '23:40', end_time: '08:30', category: 'free',    duration_minutes: null, display_color: '#bbf7d0', sort_order: 110, is_selectable: false },
 ];
 
+/**
+ * 교시 번호 목록을 보기 좋은 라벨로 변환한다.
+ * 수업 교시는 'N교시', 특수 교시는 이름(자율학습/점심식사/저녁식사/0교시 등) 그대로.
+ * (예전 데이터로 자율학습(23)·식사(22)가 '23교시'처럼 뜨던 문제 해결)
+ */
+export function formatPeriodNumbers(
+  periodNumbers: number[] | null | undefined,
+  periods: PeriodRow[] | undefined
+): string {
+  if (!periodNumbers || periodNumbers.length === 0) return '-';
+  const byNum = new Map((periods ?? PLACEHOLDER).map((p) => [p.period_number, p]));
+  return [...periodNumbers]
+    .sort((a, b) => a - b)
+    .map((n) => byNum.get(n)?.display_name || `${n}교시`)
+    .join(', ');
+}
+
 export function usePeriods() {
   return useQuery({
     queryKey: ['periods'],
