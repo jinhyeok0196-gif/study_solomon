@@ -8,6 +8,8 @@ interface WeeklyScheduleGridProps {
   selected: ReadonlySet<string>;
   onCellChange?: (dayOfWeek: DayOfWeek, periodNumber: number, selected: boolean) => void;
   readOnly?: boolean;
+  /** 결석 승인된 셀(cellKey) — 해당 교시에 X·결석승인 표시 */
+  absenceCells?: ReadonlySet<string>;
 }
 
 interface DragState {
@@ -26,7 +28,12 @@ function categoryLabel(category: string) {
   return '자율학습';
 }
 
-export function WeeklyScheduleGrid({ selected, onCellChange, readOnly = false }: WeeklyScheduleGridProps) {
+export function WeeklyScheduleGrid({
+  selected,
+  onCellChange,
+  readOnly = false,
+  absenceCells,
+}: WeeklyScheduleGridProps) {
   const { data: periods } = usePeriods();
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -174,28 +181,38 @@ export function WeeklyScheduleGrid({ selected, onCellChange, readOnly = false }:
                 {DAYS_OF_WEEK.map((day) => {
                   const key = cellKey(day, period.period_number);
                   const isSelected = visualSelected.has(key);
+                  const isAbsence = absenceCells?.has(key) ?? false;
                   return (
                     <td key={key} className="border-b border-gray-100 p-1">
-                      <button
-                        type="button"
-                        data-day={day}
-                        data-period={period.period_number}
-                        disabled={readOnly}
-                        onMouseDown={(e) => startDrag(day, period.period_number, e)}
-                        onMouseEnter={() => applyDragCell(day, period.period_number)}
-                        onTouchStart={(e) => startDrag(day, period.period_number, e)}
-                        onContextMenu={(e) => e.preventDefault()}
-                        aria-pressed={isSelected}
-                        className={cn(
-                          'h-8 w-8 rounded-md border text-xs transition-colors',
-                          isSelected
-                            ? 'border-brand-600 bg-brand-600 text-white'
-                            : 'border-gray-200 bg-white text-transparent hover:border-brand-300',
-                          readOnly && 'cursor-default opacity-70 hover:border-gray-200'
+                      <div className="flex flex-col items-center gap-0.5">
+                        <button
+                          type="button"
+                          data-day={day}
+                          data-period={period.period_number}
+                          disabled={readOnly}
+                          onMouseDown={(e) => startDrag(day, period.period_number, e)}
+                          onMouseEnter={() => applyDragCell(day, period.period_number)}
+                          onTouchStart={(e) => startDrag(day, period.period_number, e)}
+                          onContextMenu={(e) => e.preventDefault()}
+                          aria-pressed={isSelected}
+                          title={isAbsence ? '결석 승인된 교시' : undefined}
+                          className={cn(
+                            'h-8 w-8 rounded-md border text-xs transition-colors',
+                            isAbsence
+                              ? 'border-red-500 bg-red-50 font-bold text-red-600'
+                              : isSelected
+                                ? 'border-brand-600 bg-brand-600 text-white'
+                                : 'border-gray-200 bg-white text-transparent hover:border-brand-300',
+                            readOnly && 'cursor-default opacity-70',
+                            readOnly && !isAbsence && 'hover:border-gray-200'
+                          )}
+                        >
+                          {isAbsence ? '✕' : isSelected ? '✓' : '·'}
+                        </button>
+                        {isAbsence && (
+                          <span className="text-[8px] font-medium leading-none text-red-600">결석승인</span>
                         )}
-                      >
-                        {isSelected ? '✓' : '·'}
-                      </button>
+                      </div>
                     </td>
                   );
                 })}
