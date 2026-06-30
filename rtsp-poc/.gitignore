@@ -9,3 +9,6 @@ venv/
 models/
 *.task
 *.pt
+
+# Seat1 E2E 결과(JSON)는 로컬 산출물 — 레포에 포함하지 않는다.
+logs/
