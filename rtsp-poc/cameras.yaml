@@ -1,0 +1,68 @@
+# =========================================================================
+# CameraManager 카메라 목록 (Seat1 ~ Seat8)
+# =========================================================================
+# - 비밀번호 같은 민감정보는 여기 두지 않는다.
+# - rtsp_url 은 ${SEATn_RTSP_URL} 환경변수 placeholder 로만 참조하고,
+#   실제 URL(비밀번호 포함)은 .env 에 둔다. (.env 는 깃에 올리지 않음)
+# - enabled=false 인 좌석은 시작되지 않는다.
+# - 테스트는 Seat1 한 대만 enabled=true 로 두면 된다.
+#
+# stream_type: main(고해상도 /stream1) | sub(서브 848x480 /stream2)
+# =========================================================================
+
+cameras:
+  - seat_id: Seat1
+    name: "1번 좌석"
+    rtsp_url: "${SEAT1_RTSP_URL}"
+    enabled: true            # ← 1대 테스트: Seat1 만 true
+    stream_type: sub
+    memo: "출입문 쪽"
+
+  - seat_id: Seat2
+    name: "2번 좌석"
+    rtsp_url: "${SEAT2_RTSP_URL}"
+    enabled: false
+    stream_type: sub
+    memo: ""
+
+  - seat_id: Seat3
+    name: "3번 좌석"
+    rtsp_url: "${SEAT3_RTSP_URL}"
+    enabled: false
+    stream_type: sub
+    memo: ""
+
+  - seat_id: Seat4
+    name: "4번 좌석"
+    rtsp_url: "${SEAT4_RTSP_URL}"
+    enabled: false
+    stream_type: sub
+    memo: ""
+
+  - seat_id: Seat5
+    name: "5번 좌석"
+    rtsp_url: "${SEAT5_RTSP_URL}"
+    enabled: false
+    stream_type: sub
+    memo: ""
+
+  - seat_id: Seat6
+    name: "6번 좌석"
+    rtsp_url: "${SEAT6_RTSP_URL}"
+    enabled: false
+    stream_type: sub
+    memo: ""
+
+  - seat_id: Seat7
+    name: "7번 좌석"
+    rtsp_url: "${SEAT7_RTSP_URL}"
+    enabled: false
+    stream_type: sub
+    memo: ""
+
+  - seat_id: Seat8
+    name: "8번 좌석"
+    rtsp_url: "${SEAT8_RTSP_URL}"
+    enabled: false
+    stream_type: sub
+    memo: ""
