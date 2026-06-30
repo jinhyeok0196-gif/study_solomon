@@ -1,12 +1,16 @@
 import { useEffect } from 'react';
 import { useCurrentTime } from '@/hooks/useCurrentTime';
 import { useExtraStudyMutations, useOngoingExtraStudyQuery } from '@/features/extra-study/hooks';
-import type { ScheduleSlot } from '@/hooks/useScheduleStatus';
 import { cn } from '@/lib/utils';
 
 interface Props {
   studentId: string;
-  currentSlot: ScheduleSlot | null;
+  /**
+   * 본인이 신청한 수업 교시가 진행 중인지 여부.
+   * 신청한 교시는 재실 시 이미 순공시간에 포함되므로 그때만 카드를 숨긴다.
+   * (신청하지 않은 교시 시간대·쉬는시간·집 공부 등은 교시외공부로 직접 기록)
+   */
+  isRegisteredClass: boolean;
   /** 외출/파워냅 등 다른 활동 중이면 버튼을 숨긴다 */
   disabled?: boolean;
 }
@@ -19,23 +23,22 @@ function fmtElapsed(totalSeconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-export function ExtraStudyCard({ studentId, currentSlot, disabled = false }: Props) {
+export function ExtraStudyCard({ studentId, isRegisteredClass, disabled = false }: Props) {
   const now = useCurrentTime(1000);
   const { data: ongoing } = useOngoingExtraStudyQuery(studentId);
   const { start, end } = useExtraStudyMutations(studentId);
 
-  const isClass = currentSlot?.category === 'class';
-
-  // 중복 집계 방지: 교시(수업)가 시작되면 진행 중인 교시외공부를 자동 종료
+  // 중복 집계 방지: 신청한 수업 교시가 시작되면 진행 중인 교시외공부를 자동 종료
+  // (신청한 교시는 재실로 순공에 잡히므로 교시외공부와 겹치면 이중 집계됨)
   useEffect(() => {
-    if (isClass && ongoing && !end.isPending) {
+    if (isRegisteredClass && ongoing && !end.isPending) {
       end.mutate(ongoing.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isClass, ongoing?.id]);
+  }, [isRegisteredClass, ongoing?.id]);
 
-  // 수업 교시 중에는 이미 순공시간에 포함되므로 카드 자체를 숨긴다
-  if (isClass) return null;
+  // 신청한 수업 교시 중에는 이미 순공시간에 포함되므로 카드 자체를 숨긴다
+  if (isRegisteredClass) return null;
 
   const elapsedSeconds = ongoing
     ? Math.max(0, Math.floor((now.getTime() - new Date(ongoing.started_at).getTime()) / 1000))
@@ -53,8 +56,8 @@ export function ExtraStudyCard({ studentId, currentSlot, disabled = false }: Pro
           <p className="text-sm font-semibold text-gray-800">📖 교시외공부</p>
           <p className="mt-0.5 text-xs text-gray-500">
             {ongoing
-              ? '쉬는시간에도 공부 중! 순공시간에 합산됩니다.'
-              : '쉬는시간·식사시간에 공부한다면 눌러서 순공시간에 기록하세요.'}
+              ? '공부 중! 순공시간에 합산됩니다.'
+              : '신청한 교시 외(쉬는시간·식사·집 등)에 공부한다면 눌러서 순공시간에 기록하세요.'}
           </p>
         </div>
         {ongoing && (

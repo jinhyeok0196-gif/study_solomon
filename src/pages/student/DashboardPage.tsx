@@ -67,6 +67,17 @@ export default function DashboardPage() {
     [scheduleStatus.timeline, todayPeriodNumbers]
   );
 
+  // 현재 진행 중인 교시가 '본인이 신청한' 수업 교시인지 (= 이미 순공에 집계됨).
+  // 신청하지 않은 교시 시간대에는 교시외공부로 직접 기록할 수 있게 카드를 노출한다.
+  const isRegisteredClass = useMemo(() => {
+    const slot = scheduleStatus.currentSlot;
+    return (
+      slot?.category === 'class' &&
+      slot.periodNumber != null &&
+      todayPeriodNumbers.has(slot.periodNumber)
+    );
+  }, [scheduleStatus.currentSlot, todayPeriodNumbers]);
+
   const { data: extraLogs } = useAllExtraStudyQuery(studentId);
   const { data: outingLogs } = useAllOutingsQuery(studentId);
   const { data: napLogs } = useRecentNapsQuery(studentId);
@@ -175,10 +186,10 @@ export default function DashboardPage() {
       {/* 현재 진행 중 + 남은 시간 + 다음 일정 */}
       <CurrentPeriodCard status={scheduleStatus} upcomingAlert={scheduleStatus.upcomingClassAlert} />
 
-      {/* 교시외공부 (쉬는시간/식사시간 등 비수업 시간에만 노출) */}
+      {/* 교시외공부 (본인이 신청한 수업 교시 중이 아니면 노출: 쉬는시간·식사·집 공부 등) */}
       <ExtraStudyCard
         studentId={studentId}
-        currentSlot={scheduleStatus.currentSlot}
+        isRegisteredClass={isRegisteredClass}
         disabled={isBusyWithOtherActivity}
       />
 
