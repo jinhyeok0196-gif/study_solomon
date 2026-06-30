@@ -54,6 +54,26 @@ export function remainingLabel(remainingDays: number | null): string {
   return `${remainingDays}일 남음`;
 }
 
+// 학생관리 회원상태 3분류: 재원(이용권 보유) / 휴원(이용권 정지) / 퇴원(이용권 만료·없음)
+export type EnrollmentState = 'enrolled' | 'paused' | 'withdrawn';
+
+export const ENROLLMENT_BADGE: Record<
+  EnrollmentState,
+  { label: string; tone: 'success' | 'warning' | 'danger' }
+> = {
+  enrolled: { label: '재원', tone: 'success' },
+  paused: { label: '휴원', tone: 'warning' },
+  withdrawn: { label: '퇴원', tone: 'danger' },
+};
+
+/** 이용권 보유 여부로 재원/휴원/퇴원을 판정한다. (정지=휴원, 만료·미설정=퇴원) */
+export function enrollmentState(row: MembershipRow, today: Date): EnrollmentState {
+  if (row.membershipStatus === 'paused') return 'paused';
+  // 이용권 미설정이거나 만료된 경우 퇴원으로 본다.
+  if (!row.membershipType || !row.endDate) return 'withdrawn';
+  return computeMembership(row, today).state === 'expired' ? 'withdrawn' : 'enrolled';
+}
+
 export const STATE_BADGE: Record<MembershipState, { label: string; dot: string; className: string }> = {
   active: { label: '이용중', dot: '🟢', className: 'bg-green-100 text-green-700' },
   expiring: { label: '7일 이내 만료', dot: '🟡', className: 'bg-yellow-100 text-yellow-700' },

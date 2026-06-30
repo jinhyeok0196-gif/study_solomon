@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useStudentsQuery } from '@/features/admin-students/hooks';
+import { enrollmentState, ENROLLMENT_BADGE } from '@/features/admin-membership/logic';
 import { CreateStudentForm } from '@/features/admin-students/components/CreateStudentForm';
 import { ADMIN_PATHS } from '@/routes/paths';
 import { Button } from '@/components/ui/Button';
@@ -14,6 +15,8 @@ export default function StudentsPage() {
   const { data: students, isLoading } = useStudentsQuery();
   const [search, setSearch] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
+
+  const today = useMemo(() => new Date(), []);
 
   const filtered = useMemo(() => {
     const term = search.trim();
@@ -64,29 +67,40 @@ export default function StudentsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((student) => (
-                <tr key={student.id} className="border-t border-gray-100">
-                  <td className="px-3 py-2">
-                    <Link to={ADMIN_PATHS.studentDetail(student.id)} className="font-medium text-brand-700 hover:underline">
-                      {student.name}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2">{student.phone}</td>
-                  <td className="px-3 py-2">
-                    {student.school ?? '-'} {student.grade ?? ''}
-                  </td>
-                  <td className="px-3 py-2">{student.currentPenaltyPoints}점</td>
-                  <td className="px-3 py-2">
-                    <Badge tone={student.membershipStatus === 'active' ? 'success' : 'danger'}>
-                      {student.membershipStatus === 'active'
-                        ? '재원'
-                        : student.membershipStatus === 'paused'
-                          ? '휴원'
-                          : '퇴원'}
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((student) => {
+                const badge = ENROLLMENT_BADGE[
+                  enrollmentState(
+                    {
+                      id: student.id,
+                      name: student.name,
+                      phone: student.phone,
+                      membershipStatus: student.membershipStatus,
+                      membershipType: student.membershipType,
+                      startDate: student.membershipStartDate,
+                      endDate: student.membershipEndDate,
+                      autoRenew: student.autoRenew,
+                    },
+                    today
+                  )
+                ];
+                return (
+                  <tr key={student.id} className="border-t border-gray-100">
+                    <td className="px-3 py-2">
+                      <Link to={ADMIN_PATHS.studentDetail(student.id)} className="font-medium text-brand-700 hover:underline">
+                        {student.name}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2">{student.phone}</td>
+                    <td className="px-3 py-2">
+                      {student.school ?? '-'} {student.grade ?? ''}
+                    </td>
+                    <td className="px-3 py-2">{student.currentPenaltyPoints}점</td>
+                    <td className="px-3 py-2">
+                      <Badge tone={badge.tone}>{badge.label}</Badge>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
