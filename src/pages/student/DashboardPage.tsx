@@ -14,7 +14,7 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { CurrentPeriodCard } from '@/components/schedule/CurrentPeriodCard';
-import { ScheduleTimeline } from '@/components/schedule/ScheduleTimeline';
+import { ScheduleTimeline, type SlotRequestStatus } from '@/components/schedule/ScheduleTimeline';
 import { StudentStatusBadge } from '@/components/schedule/StudentStatusBadge';
 import { ExtraStudyCard } from '@/features/extra-study/components/ExtraStudyCard';
 import { ActivityCalendar } from '@/features/activity-calendar/components/ActivityCalendar';
@@ -24,6 +24,7 @@ import { periodActivityBadges, type ActivityBadge } from '@/components/schedule/
 import { useOngoingOutingQuery, useAllOutingsQuery } from '@/features/outing/hooks';
 import { useTodayNapQuery, useRecentNapsQuery } from '@/features/powernap/hooks';
 import { useAllExtraStudyQuery } from '@/features/extra-study/hooks';
+import { useMyRequestsQuery } from '@/features/requests/hooks';
 
 const QUICK_LINKS = [
   { to: STUDENT_PATHS.outing, label: '외출', desc: '교시 중 잠시 자리를 비울 경우 (화장실, 식사, 전화 등)' },
@@ -69,6 +70,8 @@ export default function DashboardPage() {
   const { data: extraLogs } = useAllExtraStudyQuery(studentId);
   const { data: outingLogs } = useAllOutingsQuery(studentId);
   const { data: napLogs } = useRecentNapsQuery(studentId);
+  const { data: absenceRequests } = useMyRequestsQuery('absence', studentId);
+  const { data: leaveRequests } = useMyRequestsQuery('leave', studentId);
 
   const allRecords = attendanceRecords ?? [];
   const risk = penaltyProfile ? computeRiskLevel(penaltyProfile.currentPenaltyPoints) : null;
@@ -134,6 +137,29 @@ export default function DashboardPage() {
     }
     return map;
   }, [todayTimeline, outingLogs, napLogs, now]);
+
+  // 오늘 일정에 반영할 승인된 결석/조퇴 신청 (교시 슬롯별).
+  // 승인(approved)이면 해당 교시에 결석/조퇴 표시, 승인취소(pending)되면 자동으로 사라진다.
+  const requestStatusBySlot = useMemo(() => {
+    const map = new Map<string, SlotRequestStatus>();
+    const apply = (
+      requests: { requestDate: string; periodNumbers: number[]; reason: string; status: string }[] | undefined,
+      kind: SlotRequestStatus['kind']
+    ) => {
+      for (const req of requests ?? []) {
+        if (req.status !== 'approved' || req.requestDate !== todayKey) continue;
+        const periodSet = new Set(req.periodNumbers);
+        for (const slot of todayTimeline) {
+          if (slot.periodNumber != null && periodSet.has(slot.periodNumber)) {
+            map.set(slot.id, { kind, reason: req.reason });
+          }
+        }
+      }
+    };
+    apply(absenceRequests, 'absence');
+    apply(leaveRequests, 'leave');
+    return map;
+  }, [absenceRequests, leaveRequests, todayTimeline, todayKey]);
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -212,7 +238,11 @@ export default function DashboardPage() {
             description="시간표에서 오늘 공부할 교시를 신청해보세요."
           />
         ) : (
-          <ScheduleTimeline timeline={todayTimeline} badgesBySlot={badgesBySlot} />
+          <ScheduleTimeline
+            timeline={todayTimeline}
+            badgesBySlot={badgesBySlot}
+            requestStatusBySlot={requestStatusBySlot}
+          />
         )}
       </div>
 

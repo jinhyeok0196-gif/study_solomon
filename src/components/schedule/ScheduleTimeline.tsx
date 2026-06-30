@@ -8,13 +8,26 @@ function fmtTime(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 }
 
+/** 승인된 결석/조퇴 신청이 반영된 교시 상태 */
+export interface SlotRequestStatus {
+  kind: 'absence' | 'leave';
+  reason: string;
+}
+
 interface Props {
   timeline: ScheduleSlotStatus[];
   /** 슬롯 id별 외출/파워냅 뱃지 (오늘 일정에서 교시 우측에 표시) */
   badgesBySlot?: Map<string, ActivityBadge[]>;
+  /** 슬롯 id별 승인된 결석/조퇴 (오늘 일정에 반영) */
+  requestStatusBySlot?: Map<string, SlotRequestStatus>;
 }
 
-export function ScheduleTimeline({ timeline, badgesBySlot }: Props) {
+const REQUEST_KIND_LABEL: Record<SlotRequestStatus['kind'], string> = {
+  absence: '결석',
+  leave: '조퇴',
+};
+
+export function ScheduleTimeline({ timeline, badgesBySlot, requestStatusBySlot }: Props) {
   const currentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -27,6 +40,7 @@ export function ScheduleTimeline({ timeline, badgesBySlot }: Props) {
         const isCurrent = slot.status === 'current';
         const isPast = slot.status === 'past';
         const isLast = idx === timeline.length - 1;
+        const requestStatus = requestStatusBySlot?.get(slot.id);
 
         return (
           <div key={slot.id} ref={isCurrent ? currentRef : undefined} className="flex gap-3">
@@ -58,6 +72,7 @@ export function ScheduleTimeline({ timeline, badgesBySlot }: Props) {
                   <span
                     className={cn(
                       'text-sm font-medium',
+                      requestStatus && 'line-through',
                       isCurrent ? 'text-blue-800' : isPast ? 'text-gray-400' : 'text-gray-700'
                     )}
                   >
@@ -67,6 +82,14 @@ export function ScheduleTimeline({ timeline, badgesBySlot }: Props) {
                     <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-400">
                       쉬는시간
                     </span>
+                  )}
+                  {requestStatus && (
+                    <Badge
+                      tone={requestStatus.kind === 'absence' ? 'danger' : 'warning'}
+                      title={requestStatus.reason || undefined}
+                    >
+                      {REQUEST_KIND_LABEL[requestStatus.kind]} 승인
+                    </Badge>
                   )}
                   {(badgesBySlot?.get(slot.id) ?? []).map((b, i) => (
                     <Badge key={i} tone={b.kind === 'outing' ? 'warning' : 'default'}>
