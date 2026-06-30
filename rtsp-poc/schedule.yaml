@@ -1,0 +1,139 @@
+# =========================================================================
+# 솔로몬 스터디카페 교시 시간표 (Scheduler Engine v0.1)
+# =========================================================================
+# - 교시 시간은 코드에 하드코딩하지 않고 이 파일에서 읽는다.
+# - type: attendance_check | study_period | meal | break
+#   * study_period 만 Burst 트리거를 생성한다.
+#   * meal / break / attendance_check 는 Burst 미생성.
+# - start_time / end_time 은 "HH:MM" 24시간제.
+# - enabled=false 인 교시는 무시된다.
+# =========================================================================
+
+periods:
+  - period_id: arrival
+    name: "등원 확인"
+    start_time: "08:40"
+    end_time: "09:00"
+    type: attendance_check
+    enabled: true
+    memo: "등원 시간"
+
+  - period_id: P0
+    name: "0교시"
+    start_time: "09:00"
+    end_time: "09:50"
+    type: study_period
+    enabled: true
+    memo: ""
+
+  - period_id: break1
+    name: "쉬는시간"
+    start_time: "09:50"
+    end_time: "10:00"
+    type: break
+    enabled: true
+
+  - period_id: P1
+    name: "1교시"
+    start_time: "10:00"
+    end_time: "10:50"
+    type: study_period
+    enabled: true
+
+  - period_id: break2
+    name: "쉬는시간"
+    start_time: "10:50"
+    end_time: "11:00"
+    type: break
+    enabled: true
+
+  - period_id: P2
+    name: "2교시"
+    start_time: "11:00"
+    end_time: "11:50"
+    type: study_period
+    enabled: true
+
+  - period_id: lunch
+    name: "점심"
+    start_time: "11:50"
+    end_time: "13:00"
+    type: meal
+    enabled: true
+
+  - period_id: P3
+    name: "3교시"
+    start_time: "13:00"
+    end_time: "13:50"
+    type: study_period
+    enabled: true
+
+  - period_id: break3
+    name: "쉬는시간"
+    start_time: "13:50"
+    end_time: "14:00"
+    type: break
+    enabled: true
+
+  - period_id: P4
+    name: "4교시"
+    start_time: "14:00"
+    end_time: "14:50"
+    type: study_period
+    enabled: true
+
+  - period_id: break4
+    name: "쉬는시간"
+    start_time: "14:50"
+    end_time: "15:00"
+    type: break
+    enabled: true
+
+  - period_id: P5
+    name: "5교시"
+    start_time: "15:00"
+    end_time: "15:50"
+    type: study_period
+    enabled: true
+
+  - period_id: break5
+    name: "쉬는시간"
+    start_time: "15:50"
+    end_time: "16:00"
+    type: break
+    enabled: true
+
+  - period_id: P6
+    name: "6교시"
+    start_time: "16:00"
+    end_time: "16:50"
+    type: study_period
+    enabled: true
+
+  - period_id: dinner
+    name: "저녁"
+    start_time: "16:50"
+    end_time: "18:00"
+    type: meal
+    enabled: true
+
+  - period_id: P7
+    name: "7교시"
+    start_time: "18:00"
+    end_time: "18:50"
+    type: study_period
+    enabled: true
+
+  - period_id: break6
+    name: "쉬는시간"
+    start_time: "18:50"
+    end_time: "19:00"
+    type: break
+    enabled: true
+
+  - period_id: P8
+    name: "8교시"
+    start_time: "19:00"
+    end_time: "19:50"
+    type: study_period
+    enabled: true
