@@ -51,6 +51,15 @@ def create_engine(name: str, **kwargs) -> AIEngine:
 # 기본 등록: dummy
 register("dummy", DummyAIEngine)
 
+
+# opencv 는 cv2 의존이 있으므로 lazy 등록(create 시점에만 import)
+def _make_opencv(**kw):
+    from plugins.opencv_engine import OpenCVEngine
+    return OpenCVEngine(**kw)
+
+
+register("opencv", _make_opencv)
+
 # --- 향후(이번 단계 미구현) lazy 등록 예시 ---------------------------------
 # def _make_mediapipe(**kw):
 #     from plugins.mediapipe_engine import MediaPipeEngine  # 무거운 import 지연
