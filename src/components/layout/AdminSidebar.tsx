@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { to: ADMIN_PATHS.attendance, label: '출석 관리' },
   { to: ADMIN_PATHS.attendanceRequests, label: '결석·조퇴·외출' },
   { to: ADMIN_PATHS.penalties, label: '벌점·경고 관리' },
+  { to: ADMIN_PATHS.notices, label: '공지사항·이용수칙' },
   { to: ADMIN_PATHS.notifications, label: '알림' },
   { to: ADMIN_PATHS.requests, label: '회원 요청 관리' },
   { to: ADMIN_PATHS.chat, label: '학생 문의' },

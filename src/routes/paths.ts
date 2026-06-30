@@ -23,6 +23,7 @@ export const ADMIN_PATHS = {
   attendance: '/admin/attendance',
   penalties: '/admin/penalties',
   warnings: '/admin/warnings',
+  notices: '/admin/notices',
   notifications: '/admin/notifications',
   requests: '/admin/requests',
   attendanceRequests: '/admin/attendance-requests',

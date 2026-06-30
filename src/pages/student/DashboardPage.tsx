@@ -18,6 +18,7 @@ import { ScheduleTimeline, type SlotRequestStatus } from '@/components/schedule/
 import { StudentStatusBadge } from '@/components/schedule/StudentStatusBadge';
 import { ExtraStudyCard } from '@/features/extra-study/components/ExtraStudyCard';
 import { ActivityCalendar } from '@/features/activity-calendar/components/ActivityCalendar';
+import { NoticeBoard } from '@/features/notices/components/NoticeBoard';
 import { toLocalDateKey } from '@/features/activity-calendar/aggregate';
 import { liveStudySecondsFromSchedule, presenceSpanFromRecords } from '@/features/attendance/stats';
 import { periodActivityBadges, type ActivityBadge } from '@/components/schedule/activityBadges';
@@ -267,6 +268,12 @@ export default function DashboardPage() {
             requestStatusBySlot={requestStatusBySlot}
           />
         )}
+      </div>
+
+      {/* 공지사항 · 이용수칙 */}
+      <div>
+        <p className="mb-3 text-sm font-semibold text-gray-700">공지사항 · 이용수칙</p>
+        <NoticeBoard />
       </div>
 
       {/* 활동 캘린더 (출결·벌점·경고·파워냅 개요 + 날짜별 상세) */}
