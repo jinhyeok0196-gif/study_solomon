@@ -49,6 +49,11 @@ export function WeeklyScheduleGrid({
   const onCellChangeRef = useRef(onCellChange);
   onCellChangeRef.current = onCellChange;
 
+  // 터치 직후(약 300ms 뒤) 브라우저가 합성 마우스 이벤트를 발생시켜 같은 셀을
+  // 다시 토글해버린다(탭 = 켜짐→꺼짐). 마지막 터치 시각을 기록해 그 직후의
+  // 마우스 이벤트는 무시한다.
+  const lastTouchRef = useRef(0);
+
   const [draggingState, setDraggingState] = useState<{
     keys: Set<string>;
     targetSelected: boolean;
@@ -97,6 +102,7 @@ export function WeeklyScheduleGrid({
     };
 
     const handleTouchEnd = () => {
+      lastTouchRef.current = performance.now();
       if (dragRef.current.isDragging) applyDragEnd();
     };
 
@@ -123,6 +129,13 @@ export function WeeklyScheduleGrid({
 
   const startDrag = (day: DayOfWeek, period: number, e: React.MouseEvent | React.TouchEvent) => {
     if (readOnly) return;
+    const isTouch = 'touches' in e;
+    if (isTouch) {
+      lastTouchRef.current = performance.now();
+    } else if (performance.now() - lastTouchRef.current < 700) {
+      // 터치 직후의 합성 마우스 이벤트 → 이중 토글 방지를 위해 무시
+      return;
+    }
     e.preventDefault();
     const key = cellKey(day, period);
     const target = !selected.has(key);
