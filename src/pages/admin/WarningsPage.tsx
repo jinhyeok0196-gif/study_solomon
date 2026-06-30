@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/Badge';
 import { FormField } from '@/components/ui/FormField';
 import { EmptyState } from '@/components/ui/EmptyState';
 
-export default function WarningsPage() {
+export function WarningSection() {
   const { user } = useAuth();
   const { data: students } = useStudentsQuery();
   const { data: records } = useWarningRecordsFeedQuery();
@@ -30,7 +30,6 @@ export default function WarningsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h2 className="text-lg font-semibold text-gray-900">경고 관리</h2>
       <p className="text-sm text-gray-500">
         1차/2차 경고와 퇴원은 벌점 누적에 따라 자동으로 발생합니다. 아래에서는 자동 규칙과 무관하게
         수동으로 퇴원 처리를 할 수 있습니다.

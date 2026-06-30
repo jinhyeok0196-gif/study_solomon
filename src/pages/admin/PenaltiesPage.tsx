@@ -13,7 +13,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 
 const REASON_CODES = Object.keys(PENALTY_POINTS) as PenaltyReasonCode[];
 
-export default function PenaltiesPage() {
+export function PenaltySection() {
   const { user } = useAuth();
   const { data: students } = useStudentsQuery();
   const { data: records } = usePenaltyRecordsFeedQuery();
@@ -39,8 +39,6 @@ export default function PenaltiesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h2 className="text-lg font-semibold text-gray-900">벌점 관리</h2>
-
       <Card>
         <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <FormField label="학생" htmlFor="studentId" error={errors.studentId?.message}>

@@ -28,8 +28,7 @@ import StudentsPage from '@/pages/admin/StudentsPage';
 import StudentDetailPage from '@/pages/admin/StudentDetailPage';
 import AdminSchedulesPage from '@/pages/admin/SchedulesPage';
 import AdminAttendancePage from '@/pages/admin/AttendancePage';
-import PenaltiesPage from '@/pages/admin/PenaltiesPage';
-import WarningsPage from '@/pages/admin/WarningsPage';
+import PenaltyWarningPage from '@/pages/admin/PenaltyWarningPage';
 import NotificationsPage from '@/pages/admin/NotificationsPage';
 import RequestsPage from '@/pages/admin/RequestsPage';
 import AttendanceRequestsPage from '@/pages/admin/AttendanceRequestsPage';
@@ -96,8 +95,8 @@ export function AppRouter() {
         <Route path="students/:studentId" element={<StudentDetailPage />} />
         <Route path="schedules" element={<AdminSchedulesPage />} />
         <Route path="attendance" element={<AdminAttendancePage />} />
-        <Route path="penalties" element={<PenaltiesPage />} />
-        <Route path="warnings" element={<WarningsPage />} />
+        <Route path="penalties" element={<PenaltyWarningPage />} />
+        <Route path="warnings" element={<PenaltyWarningPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="requests" element={<RequestsPage />} />
         <Route path="attendance-requests" element={<AttendanceRequestsPage />} />
