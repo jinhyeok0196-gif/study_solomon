@@ -1,0 +1,30 @@
+# =========================================================================
+# AI Decision Stabilizer v0.1 설정
+# =========================================================================
+# 최근 여러 개의 RuleDecision 을 묶어 좌석별 "안정화된 AI 후보" 를 만든다.
+# ⚠️ 안정화 후보일 뿐 실제 학생 상태가 아니다. 임계값은 코드 하드코딩 없이 여기서 읽는다.
+# =========================================================================
+
+window:
+  max_decisions: 5          # 안정화에 쓰는 최근 판정 최대 개수
+  min_decisions: 3          # 이 미만이면 INSUFFICIENT_DATA
+  max_age_minutes: 15       # 이보다 오래된 판정은 제외
+
+thresholds:
+  stable_ratio: 0.6             # 우세 activity 비율이 이 이상이면 STABLE 후보
+  min_average_confidence: 0.55  # 후보 평균 신뢰도 최소
+  phone_min_count: 2            # 윈도우 내 PHONE 최소 횟수
+  absent_min_count: 2
+  sleeping_min_count: 2
+  studying_min_count: 2
+  conflict_margin: 0.15         # 상위 두 activity 비율 차가 이보다 작으면 CONFLICTED
+
+weights:
+  latest_weight: 1.2            # 가장 최근 판정 가중치
+  normal_weight: 1.0            # 그 외 판정 가중치
+  low_confidence_penalty: 0.5   # LOW_CONFIDENCE/FAILED/SKIPPED 판정 가중치 배수
+
+rules:
+  enable_majority_vote: true
+  enable_consecutive_check: true
+  enable_conflict_detection: true
