@@ -4,6 +4,7 @@ import { useRealtimeTableSync } from '@/hooks/useRealtimeTableSync';
 import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { MembershipOverviewSection } from '@/features/admin-membership/components/MembershipOverviewSection';
 
 const DASHBOARD_KEY = ['admin-dashboard-summary'];
 const NOTIFICATIONS_KEY = ['admin-notifications'];
@@ -48,6 +49,8 @@ export default function DashboardPage() {
           </Card>
         ))}
       </div>
+
+      <MembershipOverviewSection />
 
       <div>
         <h3 className="mb-2 text-sm font-semibold text-gray-700">최근 알림</h3>

@@ -761,6 +761,7 @@ export type Database = {
       }
       student_profiles: {
         Row: {
+          auto_renew: boolean
           created_at: string
           current_penalty_points: number
           enrollment_date: string
@@ -779,6 +780,7 @@ export type Database = {
           warning_count: number
         }
         Insert: {
+          auto_renew?: boolean
           created_at?: string
           current_penalty_points?: number
           enrollment_date?: string
@@ -797,6 +799,7 @@ export type Database = {
           warning_count?: number
         }
         Update: {
+          auto_renew?: boolean
           created_at?: string
           current_penalty_points?: number
           enrollment_date?: string
