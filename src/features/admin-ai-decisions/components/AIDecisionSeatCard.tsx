@@ -10,15 +10,19 @@ import {
   LOW_CONFIDENCE_THRESHOLD,
   type AIDecisionRow,
 } from '../types';
+import type { StabilizedCandidate } from '../stabilizedTypes';
+import { StabilizedCandidateBadge } from './StabilizedCandidateBadge';
 
 interface Props {
   seatId: string;
   row: AIDecisionRow | null;
   nowMs: number;
   onOpen: (row: AIDecisionRow) => void;
+  candidate?: StabilizedCandidate | null;
+  onOpenCandidate?: (candidate: StabilizedCandidate) => void;
 }
 
-function AIDecisionSeatCardInner({ seatId, row, nowMs, onOpen }: Props) {
+function AIDecisionSeatCardInner({ seatId, row, nowMs, onOpen, candidate, onOpenCandidate }: Props) {
   // 판정 없음
   if (!row) {
     return (
@@ -27,6 +31,9 @@ function AIDecisionSeatCardInner({ seatId, row, nowMs, onOpen }: Props) {
         <div className="flex flex-1 items-center justify-center py-3 min-h-[40px]">
           <p className="text-xs text-gray-300">AI 판정 없음</p>
         </div>
+        {candidate && candidate.status !== 'INSUFFICIENT_DATA' && (
+          <StabilizedCandidateBadge candidate={candidate} onClick={onOpenCandidate} className="mt-2" />
+        )}
       </div>
     );
   }
@@ -47,8 +54,9 @@ function AIDecisionSeatCardInner({ seatId, row, nowMs, onOpen }: Props) {
         <span className={cn('h-2 w-2 rounded-full', cfg.dotClass)} />
       </div>
 
-      {/* activity 뱃지 */}
-      <div className="flex items-center justify-center py-1">
+      {/* 1층: 단발 AI 판정(최근 1개) */}
+      <div className="flex flex-col items-center py-1">
+        <span className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">단발 AI</span>
         <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold', cfg.badgeClass)}>
           {cfg.emoji} {cfg.label}
         </span>
@@ -94,6 +102,13 @@ function AIDecisionSeatCardInner({ seatId, row, nowMs, onOpen }: Props) {
           상세
         </button>
       </div>
+
+      {/* 2층: 안정화된 추정(최근 3~5개 기반) — 단발 판정과 구분해 표시 */}
+      {candidate && candidate.status !== 'INSUFFICIENT_DATA' && (
+        <div className="mt-2 border-t border-gray-200/70 pt-2">
+          <StabilizedCandidateBadge candidate={candidate} onClick={onOpenCandidate} />
+        </div>
+      )}
     </div>
   );
 }

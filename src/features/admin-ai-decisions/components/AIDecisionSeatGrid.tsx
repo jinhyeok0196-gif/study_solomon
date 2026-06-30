@@ -1,16 +1,21 @@
 import { useMemo } from 'react';
 import { AIDecisionSeatCard } from './AIDecisionSeatCard';
 import { SEAT_IDS, type AIDecisionRow } from '../types';
+import type { StabilizedCandidate } from '../stabilizedTypes';
 
 interface Props {
   rows: AIDecisionRow[];
   seatIds?: string[];
   nowMs: number;
   onOpen: (row: AIDecisionRow) => void;
+  candidatesBySeat?: Record<string, StabilizedCandidate>;
+  onOpenCandidate?: (candidate: StabilizedCandidate) => void;
 }
 
-/** Seat1~Seat8 좌석별 최신 AI 판정 카드 그리드. */
-export function AIDecisionSeatGrid({ rows, seatIds = SEAT_IDS, nowMs, onOpen }: Props) {
+/** Seat1~Seat8 좌석별 카드 그리드(단발 AI 판정 + 안정화된 추정 2층 표시). */
+export function AIDecisionSeatGrid({
+  rows, seatIds = SEAT_IDS, nowMs, onOpen, candidatesBySeat, onOpenCandidate,
+}: Props) {
   const bySeat = useMemo(() => {
     const map = new Map<string, AIDecisionRow>();
     for (const row of rows) {
@@ -28,6 +33,8 @@ export function AIDecisionSeatGrid({ rows, seatIds = SEAT_IDS, nowMs, onOpen }: 
           row={bySeat.get(seatId) ?? null}
           nowMs={nowMs}
           onOpen={onOpen}
+          candidate={candidatesBySeat?.[seatId] ?? null}
+          onOpenCandidate={onOpenCandidate}
         />
       ))}
     </div>

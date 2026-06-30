@@ -4,34 +4,43 @@ import { Spinner } from '@/components/ui/Spinner';
 import {
   useLatestAIDecisionsBySeatsQuery,
   useRecentAIDecisionsQuery,
+  useStabilizedCandidatesQuery,
   useAIDecisionsRealtime,
   SEAT_DECISIONS_KEY,
   RECENT_DECISIONS_KEY,
+  STABILIZED_KEY,
 } from '../hooks';
 import { AI_DISCLAIMER, SEAT_IDS, type AIDecisionRow, type AIDecisionFilters } from '../types';
+import type { StabilizedCandidate } from '../stabilizedTypes';
 import { AIDecisionSeatGrid } from './AIDecisionSeatGrid';
 import { AIDecisionLogTable } from './AIDecisionLogTable';
 import { AIDecisionDetailDrawer } from './AIDecisionDetailDrawer';
+import { StabilizedCandidatePanel } from './StabilizedCandidatePanel';
+import { StabilizedCandidateDetail } from './StabilizedCandidateDetail';
 
 /**
  * 관리자 대시보드 "AI 판정 현황" 섹션(읽기 전용).
- * 1) 안내 배너  2) 좌석별 최신 판정 카드  3) 최근 판정 로그 + 상세 Drawer
- * ⚠️ 학생 상태/출결/벌점/알림을 절대 변경하지 않는다.
+ * 1) 안내 배너  2) 좌석 카드(단발 AI + 안정화된 추정 2층)  3) 안정화 후보 패널
+ * 4) 최근 판정 로그 + 상세 Drawer
+ * ⚠️ 학생 상태/출결/벌점/알림을 절대 변경하지 않는다. StabilizedCandidate 는 DB 에 저장하지 않는다.
  */
 export function AIDecisionSection() {
   const [filters, setFilters] = useState<AIDecisionFilters>({ limit: 50 });
-  const [selected, setSelected] = useState<AIDecisionRow | null>(null);
+  const [selectedRow, setSelectedRow] = useState<AIDecisionRow | null>(null);
+  const [selectedCandidate, setSelectedCandidate] = useState<StabilizedCandidate | null>(null);
 
   const qc = useQueryClient();
   useAIDecisionsRealtime();
 
   const seatQuery = useLatestAIDecisionsBySeatsQuery(SEAT_IDS);
+  const stabilizedQuery = useStabilizedCandidatesQuery(SEAT_IDS);
   const logQuery = useRecentAIDecisionsQuery(filters);
 
   const nowMs = Date.now();
   const refresh = () => {
     qc.invalidateQueries({ queryKey: SEAT_DECISIONS_KEY });
     qc.invalidateQueries({ queryKey: RECENT_DECISIONS_KEY });
+    qc.invalidateQueries({ queryKey: STABILIZED_KEY });
   };
 
   return (
@@ -49,10 +58,10 @@ export function AIDecisionSection() {
 
       {/* 안내 배너 */}
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-        ⚠️ {AI_DISCLAIMER}
+        ⚠️ {AI_DISCLAIMER} <span className="text-amber-600">단발 AI 판정과 "안정화된 추정"은 모두 보조 지표이며, STABLE 도 확정이 아닙니다.</span>
       </div>
 
-      {/* 좌석별 최신 판정 카드 */}
+      {/* 좌석 카드(단발 AI + 안정화된 추정) */}
       <div>
         {seatQuery.isLoading ? (
           <div className="flex justify-center py-6"><Spinner /></div>
@@ -60,7 +69,22 @@ export function AIDecisionSection() {
           <AIDecisionSeatGrid
             rows={seatQuery.data ?? []}
             nowMs={nowMs}
-            onOpen={setSelected}
+            onOpen={setSelectedRow}
+            candidatesBySeat={stabilizedQuery.data ?? {}}
+            onOpenCandidate={setSelectedCandidate}
+          />
+        )}
+      </div>
+
+      {/* 안정화 후보 요약 패널 */}
+      <div className="flex flex-col gap-2">
+        <h4 className="text-xs font-semibold text-gray-500">안정화된 추정 후보 (최근 3~5개 기반 · 관리자 확인 필요)</h4>
+        {stabilizedQuery.isLoading ? (
+          <div className="flex justify-center py-6"><Spinner /></div>
+        ) : (
+          <StabilizedCandidatePanel
+            candidatesBySeat={stabilizedQuery.data ?? {}}
+            onOpen={setSelectedCandidate}
           />
         )}
       </div>
@@ -75,13 +99,14 @@ export function AIDecisionSection() {
             rows={logQuery.data ?? []}
             filters={filters}
             onFiltersChange={setFilters}
-            onOpen={setSelected}
+            onOpen={setSelectedRow}
           />
         )}
       </div>
 
       {/* 상세 Drawer */}
-      <AIDecisionDetailDrawer row={selected} onClose={() => setSelected(null)} />
+      <AIDecisionDetailDrawer row={selectedRow} onClose={() => setSelectedRow(null)} />
+      <StabilizedCandidateDetail candidate={selectedCandidate} onClose={() => setSelectedCandidate(null)} />
     </section>
   );
 }

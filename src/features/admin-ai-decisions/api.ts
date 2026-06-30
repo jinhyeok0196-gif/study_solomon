@@ -65,6 +65,24 @@ export async function getLatestAIDecisionsBySeats(
   return result;
 }
 
+/** 안정화 계산용 최근 판정 조회(좌석별 최근 N개 확보). 그룹핑/계산은 프론트에서. */
+export async function getRecentAIDecisionsForStabilization(
+  seatIds?: string[],
+  limitPerSeat = 5
+): Promise<AIDecisionRow[]> {
+  // 좌석 수 × limitPerSeat 보다 넉넉히 가져와 좌석별 최근 N개를 안정적으로 확보.
+  const seatCount = seatIds?.length ?? 8;
+  const scan = Math.min(LATEST_SCAN_LIMIT, Math.max(40, seatCount * limitPerSeat * 4));
+  const { data, error } = await fromDecisions()
+    .select(COLUMNS)
+    .order('decided_at', { ascending: false })
+    .limit(scan);
+  if (error) throw error;
+  const rows = (data ?? []) as AIDecisionRow[];
+  if (!seatIds) return rows;
+  return rows.filter((r) => seatIds.includes(r.seat_id));
+}
+
 /** 상세 보기용 단일 조회. id(uuid) 또는 decision_uuid 둘 다 지원. */
 export async function getAIDecisionById(
   idOrDecisionUuid: string

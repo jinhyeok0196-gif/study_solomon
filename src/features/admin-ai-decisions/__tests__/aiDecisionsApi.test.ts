@@ -87,7 +87,8 @@ describe('aiDecisionsApi (read-only)', () => {
     expect(forbidden).toEqual([]);
     // select 전용 함수만 존재
     expect(names.sort()).toEqual(
-      ['getAIDecisionById', 'getLatestAIDecisionsBySeats', 'getRecentAIDecisions'].sort()
+      ['getAIDecisionById', 'getLatestAIDecisionsBySeats', 'getRecentAIDecisions',
+       'getRecentAIDecisionsForStabilization'].sort()
     );
   });
 
