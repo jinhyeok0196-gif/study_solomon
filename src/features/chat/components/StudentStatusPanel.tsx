@@ -346,7 +346,8 @@ export function StudentStatusPanel({ studentId, roomId, className }: Props) {
                 {padTwo(currentSlot.endMinutes / 60)}:{padTwo(currentSlot.endMinutes % 60)}
               </p>
               <p className="text-[10px] text-blue-500 mt-0.5">
-                남은시간 {scheduleStatus.remainingMinutes}분 {scheduleStatus.remainingSeconds}초
+                남은시간 {Math.floor(scheduleStatus.remainingSeconds / 60)}분{' '}
+                {scheduleStatus.remainingSeconds % 60}초
               </p>
               {scheduleStatus.nextSlot && (
                 <p className="text-[10px] text-gray-500 mt-1">다음 → {scheduleStatus.nextSlot.label}</p>
@@ -427,13 +428,24 @@ export function StudentStatusPanel({ studentId, roomId, className }: Props) {
             <div className="space-y-0.5">
               {selectablePeriods.map((p) => {
                 const checked = todayPeriodNumbers.has(p.period_number);
+                // 신청한 교시 중 종료 시각이 지난 교시는 '완료'로 보고 슬래시(취소선) 처리
+                const [eh, em] = p.end_time.slice(0, 5).split(':').map(Number);
+                const nowMinutes = now.getHours() * 60 + now.getMinutes();
+                const isDone = checked && nowMinutes >= eh * 60 + em;
                 return (
                   <div key={p.period_number} className="flex items-center gap-1.5 text-xs">
                     <span className={checked ? 'text-green-500' : 'text-gray-300'}>
-                      {checked ? '✅' : '□'}
+                      {isDone ? '✔' : checked ? '✅' : '□'}
                     </span>
-                    <span className={checked ? 'text-gray-700' : 'text-gray-400'}>{p.display_name}</span>
-                    <span className="text-gray-300 text-[10px]">
+                    <span
+                      className={cn(
+                        checked ? 'text-gray-700' : 'text-gray-400',
+                        isDone && 'text-gray-400 line-through'
+                      )}
+                    >
+                      {p.display_name}
+                    </span>
+                    <span className={cn('text-gray-300 text-[10px]', isDone && 'line-through')}>
                       {p.start_time.slice(0, 5)}~{p.end_time.slice(0, 5)}
                     </span>
                   </div>
