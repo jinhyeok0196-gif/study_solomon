@@ -7,10 +7,14 @@ import { useScheduleStatus } from '@/hooks/useScheduleStatus';
 import { useStudentDetailQuery } from '@/features/admin-students/hooks';
 import { usePenaltyProfileQuery, usePenaltyRecordsQuery } from '@/features/penalty/hooks';
 import { useOngoingOutingQuery, useOutingMutations, useRecentOutingsQuery } from '@/features/outing/hooks';
-import { awayDeductionMinutes, type StudyInterval } from '@/features/attendance/stats';
+import {
+  liveStudySecondsFromSchedule,
+  type StudyInterval,
+  type PresenceSpan,
+} from '@/features/attendance/stats';
+import type { Tables } from '@/lib/supabase/database.types';
 import { useTodayNapQuery, useNapMutations } from '@/features/powernap/hooks';
 import { useOngoingExtraStudyQuery, useTodayExtraStudyQuery } from '@/features/extra-study/hooks';
-import { sumExtraStudyMinutes } from '@/features/extra-study/api';
 import { useCreatePenaltyMutation } from '@/features/admin-penalty/hooks';
 import { QuickPenaltyGrant } from '@/features/admin-penalty/components/QuickPenaltyGrant';
 import { LiveElapsed } from '@/components/LiveElapsed';
@@ -48,6 +52,28 @@ function fmtMinutes(minutes: number): string {
   if (h === 0) return `${m}분`;
   if (m === 0) return `${h}시간`;
   return `${h}시간 ${m}분`;
+}
+
+/** 오늘 출결 레코드들에서 재실 구간(등원~하원)을 도출. 등원 기록 없으면 null. */
+function presenceSpanFromAttendance(rows: Tables<'attendance_records'>[]): PresenceSpan | null {
+  let start = Infinity;
+  let end = -Infinity;
+  let hasOut = false;
+  for (const r of rows) {
+    if (r.checked_in_at) {
+      const t = new Date(r.checked_in_at).getTime();
+      if (Number.isFinite(t) && t < start) start = t;
+    }
+    if (r.checked_out_at) {
+      const t = new Date(r.checked_out_at).getTime();
+      if (Number.isFinite(t) && t > end) {
+        end = t;
+        hasOut = true;
+      }
+    }
+  }
+  if (!Number.isFinite(start)) return null;
+  return { start, end: hasOut ? end : null };
 }
 
 function durationMinutes(start: string, end: string | null): number {
@@ -188,41 +214,51 @@ export function StudentStatusPanel({ studentId, roomId, className }: Props) {
     0
   );
   const napMinutes = todayNap ? durationMinutes(todayNap.started_at, todayNap.ended_at) : 0;
-  // 순공시간 = 출석한 수업 교시 시간 + 교시외공부 − (교시 중 외출/파워냅), 쉬는/식사시간 제외
+  // 순공시간(실시간) = (재실 구간 ∩ 본인이 신청한 수업 교시) − 교시 중 외출/파워냅 + 교시외공부.
+  // 학생 대시보드(liveStudySecondsFromSchedule)와 동일한 방식. QR 등원이 첫 교시에만
+  // present 레코드를 만들어도, 재실 구간(등원~하원/현재)으로 계산하므로 now 틱마다 증가한다.
   const todayKey = new Date().toISOString().slice(0, 10);
-  const periodMinutesMap = new Map<number, number>();
+  const nowMs = now.getTime();
+
   const periodTimeMap = new Map<number, { start: string; end: string }>();
   (periods ?? []).forEach((p) => {
-    const [sh, sm] = p.start_time.slice(0, 5).split(':').map(Number);
-    const [eh, em] = p.end_time.slice(0, 5).split(':').map(Number);
-    periodMinutesMap.set(p.period_number, Math.max(0, eh * 60 + em - (sh * 60 + sm)));
     periodTimeMap.set(p.period_number, { start: p.start_time, end: p.end_time });
   });
-  const attendedToday = (todayAttendance ?? []).filter(
-    (a) => a.status === 'present' || a.status === 'late'
+
+  // 오늘 본인이 신청한 수업 교시 구간
+  const DAY_KEY_MAP: Record<number, string> = {
+    0: 'sun', 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri', 6: 'sat',
+  };
+  const todayDow = DAY_KEY_MAP[new Date().getDay()];
+  const registeredToday = new Set(
+    (weekSchedule?.cells ?? [])
+      .filter((c) => c.day_of_week === todayDow)
+      .map((c) => c.period_number)
   );
-  const periodStudyMinutes = attendedToday.reduce(
-    (sum, a) => sum + (periodMinutesMap.get(a.period_number) ?? 0),
-    0
-  );
-  const attendedIntervals: StudyInterval[] = attendedToday
-    .map((a) => {
-      const t = periodTimeMap.get(a.period_number);
-      if (!t) return null;
-      return {
-        start: new Date(`${todayKey}T${t.start}`).getTime(),
-        end: new Date(`${todayKey}T${t.end}`).getTime(),
-      };
-    })
-    .filter((iv): iv is StudyInterval => iv != null);
+  const classIntervals: StudyInterval[] = [...registeredToday]
+    .map((pn) => periodTimeMap.get(pn))
+    .filter((t): t is { start: string; end: string } => t != null)
+    .map((t) => ({
+      start: new Date(`${todayKey}T${t.start}`).getTime(),
+      end: new Date(`${todayKey}T${t.end}`).getTime(),
+    }))
+    .filter((iv) => Number.isFinite(iv.start) && Number.isFinite(iv.end) && iv.end > iv.start);
+
+  // 재실 구간(등원~하원, 아직 재실 중이면 현재까지)
+  const presence = presenceSpanFromAttendance(todayAttendance ?? []);
+
   const todayOutingLogs = (recentOutings ?? []).filter((o) => o.started_at.slice(0, 10) === todayKey);
   const awayLogs = [
     ...todayOutingLogs.map((o) => ({ startedAt: o.started_at, endedAt: o.ended_at })),
     ...(todayNap ? [{ startedAt: todayNap.started_at, endedAt: todayNap.ended_at }] : []),
   ];
-  const studyMinutes = Math.max(
-    0,
-    periodStudyMinutes + sumExtraStudyMinutes(todayExtraStudy ?? []) - awayDeductionMinutes(attendedIntervals, awayLogs)
+  const extraLogs = (todayExtraStudy ?? []).map((e) => ({
+    startedAt: e.started_at,
+    endedAt: e.ended_at,
+  }));
+
+  const studyMinutes = Math.floor(
+    liveStudySecondsFromSchedule(classIntervals, presence, extraLogs, awayLogs, nowMs) / 60
   );
 
   const [penaltyForm, setPenaltyForm] = useState<{ reasonCode: PenaltyReasonCode | ''; desc: string }>({
