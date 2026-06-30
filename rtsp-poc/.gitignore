@@ -4,6 +4,8 @@ __pycache__/
 .venv/
 venv/
 
-# MediaPipe 모델 파일은 레포에 포함하지 않는다(용량/라이선스). 직접 내려받아 배치.
+# AI 모델 파일은 레포에 포함하지 않는다(용량/라이선스). 직접 내려받아 배치.
+# MediaPipe(.task), YOLO/Ultralytics(.pt) 등.
 models/
 *.task
+*.pt

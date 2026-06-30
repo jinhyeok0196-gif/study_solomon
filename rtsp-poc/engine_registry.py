@@ -69,3 +69,13 @@ def _make_mediapipe(**kw):
 
 
 register("mediapipe", _make_mediapipe)
+
+
+# yolo 는 ultralytics 의존이 있으므로 lazy 등록(create 시점에만 plugin import).
+# 실제 ultralytics import 는 engine.initialize() 의 real backend.initialize() 이후에만 일어난다.
+def _make_yolo(**kw):
+    from plugins.yolo_engine import YOLOEngine
+    return YOLOEngine(**kw)
+
+
+register("yolo", _make_yolo)

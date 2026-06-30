@@ -1,0 +1,36 @@
+# =========================================================================
+# YOLO Object Engine v0.1 설정
+# =========================================================================
+# YOLO Object Detection 으로 "객체 관련 원자적 특징(Facts)" 만 추출한다.
+# 공부/휴대폰 사용/수면/자리비움 같은 최종 행동 판별은 절대 하지 않는다(Rule Engine 의 일).
+#
+# 주의:
+#   - 모델 파일(.pt)은 레포에 포함하지 않는다. models/ 는 .gitignore 처리.
+#   - 모델 파일이 없으면 실제 backend 는 initialize() 에서 명확히 실패한다.
+#   - 모델 파일 배치 방법은 README 의 "YOLO 모델 파일" 절 참고.
+# =========================================================================
+
+model:
+  path: "models/yolo_object.pt"   # 레포 미포함 — 직접 내려받아 배치(예: yolov8n.pt)
+  device: "cpu"                   # cpu | cuda:0 ...
+  image_size: 640
+  confidence_threshold: 0.35
+  iou_threshold: 0.45
+
+runtime:
+  sample_every_n_frames: 2        # N프레임마다 1장만 분석
+  max_analyzed_frames: 10         # Burst 당 분석 프레임 상한
+  apply_roi: false                # 이번 단계 기본 비활성(선택 적용)
+
+# YOLO 원본 라벨 → Solomon 표준 라벨 매핑(ObjectLabelMapper 가 사용)
+target_objects:
+  phone:
+    labels: ["cell phone", "phone", "mobile phone"]
+  book:
+    labels: ["book"]
+  laptop:
+    labels: ["laptop"]
+  tablet:
+    labels: ["tablet", "ipad"]
+  person:
+    labels: ["person"]
