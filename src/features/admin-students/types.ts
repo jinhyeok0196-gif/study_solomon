@@ -12,6 +12,7 @@ export interface StudentSummary {
   membershipType: string | null;
   membershipStartDate: string | null;
   membershipEndDate: string | null;
+  autoRenew: boolean;
   currentPenaltyPoints: number;
   warningCount: number;
   memo: string | null;

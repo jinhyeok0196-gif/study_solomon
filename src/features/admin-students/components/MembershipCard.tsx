@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { addDays, addMonths, addYears, format, differenceInCalendarDays } from 'date-fns';
-import { useGrantMembershipMutation } from '../hooks';
+import { useGrantMembershipMutation, useSetAutoRenewMutation } from '../hooks';
 import type { StudentSummary } from '../types';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -35,6 +35,7 @@ function fmtKo(dateStr: string): string {
 
 export function MembershipCard({ student }: { student: StudentSummary }) {
   const mutation = useGrantMembershipMutation(student.id);
+  const autoRenewMutation = useSetAutoRenewMutation(student.id);
   const [startDate, setStartDate] = useState(todayStr());
   const [endDate, setEndDate] = useState('');
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
@@ -93,6 +94,32 @@ export function MembershipCard({ student }: { student: StudentSummary }) {
         ) : (
           <p className="mt-2 text-sm text-gray-400">등록된 이용권이 없습니다.</p>
         )}
+      </div>
+
+      {/* 자동연장 토글 */}
+      <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3">
+        <div>
+          <p className="text-sm font-medium text-gray-800">자동연장</p>
+          <p className="text-xs text-gray-400">만료일이 지나도 자동연장 대상으로 관리됩니다</p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={student.autoRenew}
+          disabled={autoRenewMutation.isPending}
+          onClick={() => autoRenewMutation.mutate(!student.autoRenew)}
+          className={cn(
+            'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50',
+            student.autoRenew ? 'bg-brand-600' : 'bg-gray-300'
+          )}
+        >
+          <span
+            className={cn(
+              'inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform',
+              student.autoRenew ? 'translate-x-5' : 'translate-x-0.5'
+            )}
+          />
+        </button>
       </div>
 
       {/* 이용권 부여 */}

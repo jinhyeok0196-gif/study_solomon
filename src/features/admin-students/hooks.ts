@@ -5,6 +5,7 @@ import {
   fetchAllStudents,
   fetchStudentDetail,
   grantMembership,
+  setAutoRenew,
   updateStudent,
 } from './api';
 import type { CreateStudentInput, GrantMembershipInput, UpdateStudentInput } from './types';
@@ -57,6 +58,18 @@ export function useGrantMembershipMutation(studentId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-students'] });
       queryClient.invalidateQueries({ queryKey: ['admin-student-detail', studentId] });
+    },
+  });
+}
+
+export function useSetAutoRenewMutation(studentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (autoRenew: boolean) => setAutoRenew(studentId, autoRenew),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-students'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-student-detail', studentId] });
+      queryClient.invalidateQueries({ queryKey: ['admin-membership-overview'] });
     },
   });
 }

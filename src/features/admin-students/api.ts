@@ -12,6 +12,7 @@ interface StudentProfileJoinRow {
   membership_type: string | null;
   membership_start_date: string | null;
   membership_end_date: string | null;
+  auto_renew: boolean;
   current_penalty_points: number;
   warning_count: number;
   memo: string | null;
@@ -19,7 +20,7 @@ interface StudentProfileJoinRow {
 }
 
 const STUDENT_SELECT =
-  'id, student_number, school, grade, guardian_phone, enrollment_date, membership_status, membership_type, membership_start_date, membership_end_date, current_penalty_points, warning_count, memo, users(name, phone, status)';
+  'id, student_number, school, grade, guardian_phone, enrollment_date, membership_status, membership_type, membership_start_date, membership_end_date, auto_renew, current_penalty_points, warning_count, memo, users(name, phone, status)';
 
 function mapRow(row: StudentProfileJoinRow): StudentSummary {
   return {
@@ -36,6 +37,7 @@ function mapRow(row: StudentProfileJoinRow): StudentSummary {
     membershipType: row.membership_type,
     membershipStartDate: row.membership_start_date,
     membershipEndDate: row.membership_end_date,
+    autoRenew: row.auto_renew,
     currentPenaltyPoints: row.current_penalty_points,
     warningCount: row.warning_count,
     memo: row.memo,
@@ -77,6 +79,14 @@ export async function grantMembership(
     })
     .eq('id', studentId);
   if (error) throw new Error('이용권 부여 중 오류가 발생했습니다.');
+}
+
+export async function setAutoRenew(studentId: string, autoRenew: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('student_profiles')
+    .update({ auto_renew: autoRenew })
+    .eq('id', studentId);
+  if (error) throw new Error('자동연장 설정 변경 중 오류가 발생했습니다.');
 }
 
 export async function createStudent(input: CreateStudentInput): Promise<void> {
