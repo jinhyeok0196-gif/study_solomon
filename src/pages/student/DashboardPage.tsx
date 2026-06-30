@@ -67,6 +67,15 @@ export default function DashboardPage() {
     [scheduleStatus.timeline, todayPeriodNumbers]
   );
 
+  const todayKey = toLocalDateKey(now.toISOString());
+
+  // QR 등원(체크인)했고 아직 하원하지 않았는지. 상태 뱃지(미등원/등원/공부중) 판별용.
+  const isCheckedIn = useMemo(() => {
+    const todayRecords = (attendanceRecords ?? []).filter((r) => r.classDate === todayKey);
+    const span = presenceSpanFromRecords(todayRecords);
+    return span != null && span.end == null;
+  }, [attendanceRecords, todayKey]);
+
   // 현재 진행 중인 교시가 '본인이 신청한' 수업 교시인지 (= 이미 순공에 집계됨).
   // 신청하지 않은 교시 시간대에는 교시외공부로 직접 기록할 수 있게 카드를 노출한다.
   const isRegisteredClass = useMemo(() => {
@@ -87,7 +96,6 @@ export default function DashboardPage() {
   const allRecords = attendanceRecords ?? [];
   const risk = penaltyProfile ? computeRiskLevel(penaltyProfile.currentPenaltyPoints) : null;
 
-  const todayKey = toLocalDateKey(now.toISOString());
   // 오늘 순공시간은 매초 실시간 계산한다 (now가 의존성에 있어 1초마다 재계산).
   // 교시 구간은 '출결 레코드'가 아니라 '오늘 신청한 수업 교시 시간표'로 만든다 →
   // 아직 레코드가 없는 진행 중 교시(첫 교시 이후)도 재실 중이면 매초 카운팅된다.
@@ -180,7 +188,11 @@ export default function DashboardPage() {
           <h2 className="text-lg font-semibold text-gray-900">{user!.name}님, 안녕하세요</h2>
           <p className="text-sm text-gray-500">솔로몬스터디카페</p>
         </div>
-        <StudentStatusBadge currentSlot={scheduleStatus.currentSlot} />
+        <StudentStatusBadge
+          currentSlot={scheduleStatus.currentSlot}
+          isCheckedIn={isCheckedIn}
+          isRegisteredClass={isRegisteredClass}
+        />
       </div>
 
       {/* 현재 진행 중 + 남은 시간 + 다음 일정 */}
