@@ -1,0 +1,32 @@
+# =========================================================================
+# Rule Engine v0.1 설정
+# =========================================================================
+# SeatFacts → RuleDecision 판정에 쓰는 임계값/가중치/규칙 토글.
+# 임계값은 코드에 하드코딩하지 않고 여기서 읽는다.
+#
+# ⚠️ v0.1 은 보수적으로 판정한다. 천장 카메라에서는 사람/얼굴 검출이 실패할 수 있어
+#    confidence 를 무리하게 높이지 않는다. 측면 카메라 실데이터 확보 전까지 보수 운영.
+# =========================================================================
+
+thresholds:
+  min_overall_quality: 0.3        # 이 미만이면 UNKNOWN(LOW_CONFIDENCE)
+  phone_confidence: 0.65          # PHONE 확정 최소 confidence
+  studying_confidence: 0.6        # STUDYING 확정 최소 confidence
+  absent_confidence: 0.7          # ABSENT 확정 최소 confidence
+  sleeping_confidence: 0.6        # SLEEPING 확정 최소 confidence
+  conflict_margin: 0.15           # 상위 두 후보 confidence 차가 이보다 작으면 충돌→UNKNOWN
+  sleeping_confidence_cap: 0.75   # 수면은 motion score 없음 → 신뢰도 상한(보수)
+
+# PHONE 가중치(합 = 1.0). phone_detected 일 때만 적용.
+weights:
+  phone_object: 0.45              # 휴대폰 객체 검출 자체
+  hands_visible: 0.20             # 손이 함께 보이면(× hands_visible_ratio)
+  no_book: 0.15                   # 책이 없으면(공부 도구 아님)
+  no_laptop: 0.10                 # 노트북이 없으면
+  person_present: 0.10            # 사람/자세가 보이면
+
+rules:
+  enable_phone_rule: true
+  enable_studying_rule: true
+  enable_absent_rule: true
+  enable_sleeping_rule: true
