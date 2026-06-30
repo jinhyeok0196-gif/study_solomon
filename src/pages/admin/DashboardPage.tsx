@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { MembershipOverviewSection } from '@/features/admin-membership/components/MembershipOverviewSection';
+import { AIDecisionSection } from '@/features/admin-ai-decisions/components/AIDecisionSection';
 
 const DASHBOARD_KEY = ['admin-dashboard-summary'];
 const NOTIFICATIONS_KEY = ['admin-notifications'];
@@ -67,6 +68,9 @@ export default function DashboardPage() {
           </ul>
         )}
       </div>
+
+      {/* AI 판정 현황 (읽기 전용 — 학생 상태/출결/벌점 자동 변경 없음) */}
+      <AIDecisionSection />
     </div>
   );
 }
