@@ -6,6 +6,7 @@ import { fetchAttendanceForDate } from '@/features/admin-attendance/api';
 import { fetchStudentWeekScheduleCells } from '@/features/chat/studentPanelApi';
 import { getWeekStartDate } from '@/features/schedule/dates';
 import { adminCheckinStudent, adminCancelCheckinStudent } from '../api';
+import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/utils';
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -28,6 +29,7 @@ export function ManualCheckinPanel() {
 
   const [search, setSearch] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<{ id: string; name: string } | null>(null);
 
   const checkedInIds = useMemo(
     () => new Set((todayAttendance ?? []).filter((a) => a.checked_in_at).map((a) => a.student_id)),
@@ -82,11 +84,11 @@ export function ManualCheckinPanel() {
     }
   }
 
-  async function handleCancel(studentId: string) {
-    if (!window.confirm('이 학생의 오늘 등원 처리를 취소하시겠습니까?')) return;
+  async function doCancel(studentId: string, keepStudyTime: boolean) {
+    setCancelTarget(null);
     setBusyId(studentId);
     try {
-      await adminCancelCheckinStudent({ studentId, classDate: today });
+      await adminCancelCheckinStudent({ studentId, classDate: today, keepStudyTime });
       await qc.invalidateQueries({ queryKey: attendanceKey });
     } catch {
       window.alert('등원 처리 취소 중 오류가 발생했습니다.');
@@ -136,7 +138,7 @@ export function ManualCheckinPanel() {
                     </span>
                     <button
                       type="button"
-                      onClick={() => handleCancel(s.id)}
+                      onClick={() => setCancelTarget({ id: s.id, name: s.name })}
                       disabled={busyId === s.id}
                       className="rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                     >
@@ -160,6 +162,46 @@ export function ManualCheckinPanel() {
           })
         )}
       </div>
+
+      <Modal
+        open={cancelTarget != null}
+        onClose={() => setCancelTarget(null)}
+        title="등원 취소"
+      >
+        <p className="text-sm text-gray-600">
+          <b className="text-gray-900">{cancelTarget?.name}</b> 학생의 등원을 취소합니다. 오늘 기록된
+          순공시간을 어떻게 할까요?
+        </p>
+        <div className="mt-4 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => cancelTarget && doCancel(cancelTarget.id, true)}
+            className="rounded-md bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            순공시간 유지 (하원 처리)
+            <span className="mt-0.5 block text-xs font-normal text-brand-100">
+              현재까지 순공시간을 보존하고 더 이상 집계하지 않습니다.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => cancelTarget && doCancel(cancelTarget.id, false)}
+            className="rounded-md border border-red-300 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50"
+          >
+            순공시간 삭제 (등원 취소)
+            <span className="mt-0.5 block text-xs font-normal text-red-400">
+              등원 기록과 오늘 순공시간을 모두 삭제합니다.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCancelTarget(null)}
+            className="rounded-md py-2 text-sm font-medium text-gray-500 hover:bg-gray-50"
+          >
+            닫기
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

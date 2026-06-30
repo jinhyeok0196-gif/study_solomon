@@ -37,6 +37,7 @@ export async function adminCheckinStudent(params: {
       period_number: params.periodNumber,
       status: 'present',
       checked_in_at: new Date().toISOString(),
+      checked_out_at: null, // 재등원 시 이전 하원 기록 초기화(재실 구간 새로 시작)
       source: 'admin',
     },
     { onConflict: 'student_id,class_date,period_number' }
@@ -46,13 +47,27 @@ export async function adminCheckinStudent(params: {
 
 /**
  * 관리자: 학생의 오늘 등원 처리를 취소한다.
- * 오늘 모든 출석 레코드의 checked_in_at/checked_out_at 을 비워 재실 구간을 제거
- * (순공시간 집계 중단).
+ * - keepStudyTime=true: 하원 처리(checked_out_at=now). 현재까지 순공시간을 보존·고정.
+ * - keepStudyTime=false: checked_in_at/checked_out_at 을 모두 비워 순공시간을 삭제.
  */
 export async function adminCancelCheckinStudent(params: {
   studentId: string;
   classDate: string;
+  keepStudyTime: boolean;
 }): Promise<void> {
+  if (params.keepStudyTime) {
+    // 재실 중(등원했고 아직 하원 안 함)인 레코드를 현재 시각으로 하원 처리 → 순공시간 고정
+    const { error } = await supabase
+      .from('attendance_records')
+      .update({ checked_out_at: new Date().toISOString() })
+      .eq('student_id', params.studentId)
+      .eq('class_date', params.classDate)
+      .not('checked_in_at', 'is', null)
+      .is('checked_out_at', null);
+    if (error) throw error;
+    return;
+  }
+
   const { error } = await supabase
     .from('attendance_records')
     .update({ checked_in_at: null, checked_out_at: null })
