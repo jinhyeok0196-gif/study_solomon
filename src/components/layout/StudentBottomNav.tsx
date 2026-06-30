@@ -9,12 +9,17 @@ const NAV_ITEMS = [
   { to: STUDENT_PATHS.mypage, label: 'MY', icon: '👤' },
 ];
 
-export function StudentBottomNav() {
+export function StudentBottomNav({ restricted = false }: { restricted?: boolean }) {
+  // 회원권 미설정/만료 시에는 문의(채팅)만 노출한다.
+  const items = restricted
+    ? NAV_ITEMS.filter((item) => item.to === STUDENT_PATHS.chat)
+    : NAV_ITEMS;
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 grid grid-cols-4 border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_10px_rgba(0,0,0,0.06)]"
+      style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
+      className="fixed bottom-0 left-0 right-0 z-40 grid border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_10px_rgba(0,0,0,0.06)]"
     >
-      {NAV_ITEMS.map((item) => (
+      {items.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}
