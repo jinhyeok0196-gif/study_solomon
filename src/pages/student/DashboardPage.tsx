@@ -19,6 +19,7 @@ import { StudentStatusBadge } from '@/components/schedule/StudentStatusBadge';
 import { ExtraStudyCard } from '@/features/extra-study/components/ExtraStudyCard';
 import { ActivityCalendar } from '@/features/activity-calendar/components/ActivityCalendar';
 import { NoticeBoard } from '@/features/notices/components/NoticeBoard';
+import { BoardSection } from '@/features/board/components/BoardSection';
 import { toLocalDateKey } from '@/features/activity-calendar/aggregate';
 import { liveStudySecondsFromSchedule, presenceSpanFromRecords } from '@/features/attendance/stats';
 import { periodActivityBadges, type ActivityBadge } from '@/components/schedule/activityBadges';
@@ -280,6 +281,12 @@ export default function DashboardPage() {
       <div>
         <p className="mb-3 text-sm font-semibold text-gray-700">활동 캘린더</p>
         <ActivityCalendar studentId={studentId} />
+      </div>
+
+      {/* 불만·건의 게시판 (홈 제일 아래) */}
+      <div>
+        <p className="mb-3 text-sm font-semibold text-gray-700">불만·건의 게시판</p>
+        <BoardSection />
       </div>
     </div>
   );

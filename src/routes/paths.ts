@@ -24,6 +24,7 @@ export const ADMIN_PATHS = {
   penalties: '/admin/penalties',
   warnings: '/admin/warnings',
   notices: '/admin/notices',
+  board: '/admin/board',
   notifications: '/admin/notifications',
   requests: '/admin/requests',
   attendanceRequests: '/admin/attendance-requests',

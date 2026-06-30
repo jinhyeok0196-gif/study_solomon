@@ -30,6 +30,7 @@ import AdminSchedulesPage from '@/pages/admin/SchedulesPage';
 import AdminAttendancePage from '@/pages/admin/AttendancePage';
 import PenaltyWarningPage from '@/pages/admin/PenaltyWarningPage';
 import NoticesPage from '@/pages/admin/NoticesPage';
+import BoardPage from '@/pages/admin/BoardPage';
 import NotificationsPage from '@/pages/admin/NotificationsPage';
 import RequestsPage from '@/pages/admin/RequestsPage';
 import AttendanceRequestsPage from '@/pages/admin/AttendanceRequestsPage';
@@ -99,6 +100,7 @@ export function AppRouter() {
         <Route path="penalties" element={<PenaltyWarningPage />} />
         <Route path="warnings" element={<PenaltyWarningPage />} />
         <Route path="notices" element={<NoticesPage />} />
+        <Route path="board" element={<BoardPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="requests" element={<RequestsPage />} />
         <Route path="attendance-requests" element={<AttendanceRequestsPage />} />

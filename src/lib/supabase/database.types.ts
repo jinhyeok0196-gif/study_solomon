@@ -34,6 +34,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      board_posts: {
+        Row: {
+          admin_reply: string | null
+          admin_reply_at: string | null
+          admin_reply_by: string | null
+          author_name: string | null
+          category: string
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_anonymous: boolean
+          updated_at: string
+        }
+        Insert: {
+          admin_reply?: string | null
+          admin_reply_at?: string | null
+          admin_reply_by?: string | null
+          author_name?: string | null
+          category?: string
+          content: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_anonymous?: boolean
+          updated_at?: string
+        }
+        Update: {
+          admin_reply?: string | null
+          admin_reply_at?: string | null
+          admin_reply_by?: string | null
+          author_name?: string | null
+          category?: string
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_anonymous?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "board_posts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "board_posts_admin_reply_by_fkey"
+            columns: ["admin_reply_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       absence_requests: {
         Row: {
           created_at: string
