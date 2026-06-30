@@ -44,6 +44,23 @@ export async function adminCheckinStudent(params: {
   if (error) throw error;
 }
 
+/**
+ * 관리자: 학생의 오늘 등원 처리를 취소한다.
+ * 오늘 모든 출석 레코드의 checked_in_at/checked_out_at 을 비워 재실 구간을 제거
+ * (순공시간 집계 중단).
+ */
+export async function adminCancelCheckinStudent(params: {
+  studentId: string;
+  classDate: string;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('attendance_records')
+    .update({ checked_in_at: null, checked_out_at: null })
+    .eq('student_id', params.studentId)
+    .eq('class_date', params.classDate);
+  if (error) throw error;
+}
+
 /** 관리자(키오스크): 현재 유효한 회전 토큰 발급 */
 export async function fetchCheckinToken(): Promise<string> {
   const { data, error } = await supabase.rpc('current_checkin_token');

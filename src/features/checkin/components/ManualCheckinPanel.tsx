@@ -5,7 +5,7 @@ import { useStudentsQuery } from '@/features/admin-students/hooks';
 import { fetchAttendanceForDate } from '@/features/admin-attendance/api';
 import { fetchStudentWeekScheduleCells } from '@/features/chat/studentPanelApi';
 import { getWeekStartDate } from '@/features/schedule/dates';
-import { adminCheckinStudent } from '../api';
+import { adminCheckinStudent, adminCancelCheckinStudent } from '../api';
 import { cn } from '@/lib/utils';
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -34,9 +34,20 @@ export function ManualCheckinPanel() {
     [todayAttendance]
   );
 
+  // 현재 이용권 보유(활성 + 만료 안 됨) 학생만 대상으로 한다.
+  const memberStudents = useMemo(
+    () =>
+      (students ?? []).filter(
+        (s) =>
+          s.membershipStatus === 'active' &&
+          (!s.membershipEndDate || s.membershipEndDate >= today)
+      ),
+    [students, today]
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const list = (students ?? []).filter(
+    const list = memberStudents.filter(
       (s) => !q || s.name.toLowerCase().includes(q) || (s.phone ?? '').includes(q)
     );
     // 미등원 학생을 위로
@@ -46,7 +57,7 @@ export function ManualCheckinPanel() {
       if (ai !== bi) return ai - bi;
       return a.name.localeCompare(b.name);
     });
-  }, [students, search, checkedInIds]);
+  }, [memberStudents, search, checkedInIds]);
 
   async function handleCheckin(studentId: string) {
     setBusyId(studentId);
@@ -71,7 +82,20 @@ export function ManualCheckinPanel() {
     }
   }
 
-  const notCheckedInCount = (students ?? []).filter((s) => !checkedInIds.has(s.id)).length;
+  async function handleCancel(studentId: string) {
+    if (!window.confirm('이 학생의 오늘 등원 처리를 취소하시겠습니까?')) return;
+    setBusyId(studentId);
+    try {
+      await adminCancelCheckinStudent({ studentId, classDate: today });
+      await qc.invalidateQueries({ queryKey: attendanceKey });
+    } catch {
+      window.alert('등원 처리 취소 중 오류가 발생했습니다.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const notCheckedInCount = memberStudents.filter((s) => !checkedInIds.has(s.id)).length;
 
   return (
     <div className="flex w-full flex-col rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -106,9 +130,19 @@ export function ManualCheckinPanel() {
                   <p className="truncate text-[11px] text-gray-400">{s.phone}</p>
                 </div>
                 {checkedIn ? (
-                  <span className="flex-shrink-0 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-600">
-                    ✓ 등원완료
-                  </span>
+                  <div className="flex flex-shrink-0 items-center gap-1.5">
+                    <span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-600">
+                      ✓ 등원완료
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCancel(s.id)}
+                      disabled={busyId === s.id}
+                      className="rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {busyId === s.id ? '취소 중...' : '취소'}
+                    </button>
+                  </div>
                 ) : (
                   <button
                     type="button"
