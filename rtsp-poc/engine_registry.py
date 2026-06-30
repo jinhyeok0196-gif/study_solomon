@@ -60,8 +60,12 @@ def _make_opencv(**kw):
 
 register("opencv", _make_opencv)
 
-# --- 향후(이번 단계 미구현) lazy 등록 예시 ---------------------------------
-# def _make_mediapipe(**kw):
-#     from plugins.mediapipe_engine import MediaPipeEngine  # 무거운 import 지연
-#     return MediaPipeEngine(**kw)
-# register("mediapipe", _make_mediapipe)
+
+# mediapipe 는 mediapipe/numpy 의존이 있으므로 lazy 등록(create 시점에만 import).
+# 실제 mediapipe import 는 engine.initialize() 의 real backend 생성 이후에만 일어난다.
+def _make_mediapipe(**kw):
+    from plugins.mediapipe_engine import MediaPipeEngine
+    return MediaPipeEngine(**kw)
+
+
+register("mediapipe", _make_mediapipe)
