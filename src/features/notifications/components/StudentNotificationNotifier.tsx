@@ -20,6 +20,9 @@ function Inner({ studentId }: { studentId: string }) {
   const { data: unread } = useQuery({
     queryKey: keyOf(studentId),
     queryFn: () => fetchUnreadStudentNotifications(studentId),
+    // 실시간이 놓쳐도(구독 전 발생/네트워크) 주기적으로 미읽음을 잡아 팝업
+    refetchInterval: 20000,
+    refetchOnWindowFocus: true,
   });
 
   // 본인 대상 알림(승인/반려 등)을 플로팅 팝업으로 표시하고 읽음 처리한다.
