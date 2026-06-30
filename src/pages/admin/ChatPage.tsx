@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import {
   useAdminChatRoomsQuery,
@@ -94,6 +95,7 @@ export default function AdminChatPage() {
   const { user } = useAuth();
   const adminId = user!.id;
   const adminName = user!.name;
+  const [searchParams] = useSearchParams();
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [selectedStudentName, setSelectedStudentName] = useState<string>('');
@@ -148,6 +150,19 @@ export default function AdminChatPage() {
     setSelectedStudentId(room.student_id);
     setSelectedStudentName(room.student_name);
   };
+
+  // 플로팅 알림 등에서 ?room=... 으로 들어오면 해당 대화방을 자동으로 연다.
+  const roomParam = searchParams.get('room');
+  useEffect(() => {
+    if (!roomParam || !rooms?.length) return;
+    const target = rooms.find((r) => r.room_id === roomParam);
+    if (target && target.room_id !== selectedRoomId) {
+      setSelectedRoomId(target.room_id);
+      setSelectedStudentId(target.student_id);
+      setSelectedStudentName(target.student_name);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomParam, rooms]);
 
   const handleSend = (content: string) => {
     if (!selectedRoomId) return;

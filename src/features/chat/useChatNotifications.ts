@@ -8,8 +8,8 @@ interface Options {
   currentUserId: string;
   /** 학생: 본인 채팅방 id (구독에 필요). 관리자: 생략(전체 방 구독). */
   roomId?: string;
-  /** 알림 클릭 시 이동 */
-  onNavigate: () => void;
+  /** 알림 클릭 시 이동 (해당 메시지를 받아 관리자는 그 학생 방으로 딥링크) */
+  onNavigate: (msg: ChatMessage) => void;
 }
 
 /**
@@ -48,7 +48,7 @@ export function useChatNotifications({ role, currentUserId, roomId, onNavigate }
           notifyRef.current({
             title: role === 'student' ? '관리자 메시지' : '새 문의 메시지',
             body: msg.content,
-            onClick: () => navRef.current(),
+            onClick: () => navRef.current(msg),
           });
         }
       )

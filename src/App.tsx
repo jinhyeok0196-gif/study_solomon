@@ -6,6 +6,7 @@ import { AuthProvider } from '@/context/AuthContext';
 import { AppRouter } from '@/routes/AppRouter';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { ConfigurationErrorPage } from '@/components/shared/ConfigurationErrorPage';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export function App() {
   if (!isSupabaseConfigured) {
@@ -16,7 +17,9 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
-          <AppRouter />
+          <ErrorBoundary>
+            <AppRouter />
+          </ErrorBoundary>
         </BrowserRouter>
       </AuthProvider>
       <ReactQueryDevtools initialIsOpen={false} />
