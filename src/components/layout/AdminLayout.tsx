@@ -3,6 +3,7 @@ import { AdminSidebar } from './AdminSidebar';
 import { Header } from './Header';
 import { FloatingNotificationProvider } from '@/components/FloatingNotification';
 import { AdminChatNotifier } from '@/features/chat/components/ChatNotifier';
+import { ApprovalPopup } from '@/features/admin-approvals/components/ApprovalPopup';
 
 export function AdminLayout() {
   return (
@@ -17,6 +18,7 @@ export function AdminLayout() {
         </div>
       </div>
       <AdminChatNotifier />
+      <ApprovalPopup />
     </FloatingNotificationProvider>
   );
 }

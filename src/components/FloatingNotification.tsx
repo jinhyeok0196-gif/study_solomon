@@ -1,14 +1,21 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 
-interface FloatingNote {
-  id: string;
+interface NotifyInput {
   title: string;
   body: string;
   onClick?: () => void;
+  /** 같은 키의 기존 알림을 최신 내용으로 교체 (예: 한 학생의 여러 메시지 → 최신만) */
+  dedupeKey?: string;
+  /** true면 자동으로 사라지지 않음 (관리자가 직접 닫아야 함) */
+  persistent?: boolean;
+}
+
+interface FloatingNote extends NotifyInput {
+  id: string;
 }
 
 interface FloatingCtxValue {
-  notify: (note: { title: string; body: string; onClick?: () => void }) => void;
+  notify: (note: NotifyInput) => void;
 }
 
 const FloatingCtx = createContext<FloatingCtxValue | null>(null);
@@ -28,21 +35,24 @@ export function FloatingNotificationProvider({ children }: { children: ReactNode
     setNotes((prev) => prev.filter((n) => n.id !== id));
   }, []);
 
-  const notify = useCallback(
-    (note: { title: string; body: string; onClick?: () => void }) => {
-      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      setNotes((prev) => [...prev, { ...note, id }]);
+  const notify = useCallback((note: NotifyInput) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setNotes((prev) => {
+      // 같은 dedupeKey 의 기존 알림은 제거하고 최신 것으로 교체
+      const base = note.dedupeKey ? prev.filter((n) => n.dedupeKey !== note.dedupeKey) : prev;
+      return [...base, { ...note, id }];
+    });
+    if (!note.persistent) {
       setTimeout(() => {
         setNotes((prev) => prev.filter((n) => n.id !== id));
       }, DURATION_MS);
-    },
-    []
-  );
+    }
+  }, []);
 
   return (
     <FloatingCtx.Provider value={{ notify }}>
       {children}
-      <div className="pointer-events-none fixed right-4 top-4 z-[100] flex w-[calc(100%-2rem)] max-w-sm flex-col gap-2">
+      <div className="pointer-events-none fixed right-4 top-4 z-[100] flex max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-sm flex-col gap-2 overflow-y-auto">
         {notes.map((n) => (
           <div
             key={n.id}

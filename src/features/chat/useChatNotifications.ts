@@ -49,6 +49,10 @@ export function useChatNotifications({ role, currentUserId, roomId, onNavigate }
             title: role === 'student' ? '관리자 메시지' : '새 문의 메시지',
             body: msg.content,
             onClick: () => navRef.current(msg),
+            // 관리자: 자동으로 사라지지 않고, 한 학생의 여러 메시지는 최신만 유지(방 단위 dedupe)
+            ...(role === 'admin'
+              ? { persistent: true, dedupeKey: `chat-${msg.room_id}` }
+              : {}),
           });
         }
       )
