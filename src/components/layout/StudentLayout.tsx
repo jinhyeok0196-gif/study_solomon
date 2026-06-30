@@ -3,6 +3,7 @@ import { Header } from './Header';
 import { StudentBottomNav } from './StudentBottomNav';
 import { FloatingNotificationProvider } from '@/components/FloatingNotification';
 import { StudentChatNotifier } from '@/features/chat/components/ChatNotifier';
+import { StudentNotificationNotifier } from '@/features/notifications/components/StudentNotificationNotifier';
 import { STUDENT_PATHS } from '@/routes/paths';
 
 export function StudentLayout() {
@@ -16,6 +17,7 @@ export function StudentLayout() {
         <StudentBottomNav />
       </div>
       <StudentChatNotifier />
+      <StudentNotificationNotifier />
     </FloatingNotificationProvider>
   );
 }

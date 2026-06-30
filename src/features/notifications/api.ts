@@ -13,6 +13,20 @@ export async function fetchAdminNotifications(): Promise<Tables<'notifications'>
   return data ?? [];
 }
 
+export async function fetchUnreadStudentNotifications(
+  studentId: string
+): Promise<Tables<'notifications'>[]> {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('recipient_id', studentId)
+    .eq('is_read', false)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function markNotificationRead(notificationId: string): Promise<void> {
   const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', notificationId);
   if (error) throw error;
