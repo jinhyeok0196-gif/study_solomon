@@ -20,6 +20,30 @@ export async function checkinByQr(token: string): Promise<CheckinResult> {
   return data as unknown as CheckinResult;
 }
 
+/**
+ * 관리자: 학생을 수동으로 '등원' 처리한다.
+ * 해당 교시 출석 레코드에 checked_in_at=now() 를 찍어 재실 구간을 만든다
+ * (순공시간 계산의 시작점). 기존 레코드가 있으면(예: 크론 결석) present 로 갱신.
+ */
+export async function adminCheckinStudent(params: {
+  studentId: string;
+  classDate: string;
+  periodNumber: number;
+}): Promise<void> {
+  const { error } = await supabase.from('attendance_records').upsert(
+    {
+      student_id: params.studentId,
+      class_date: params.classDate,
+      period_number: params.periodNumber,
+      status: 'present',
+      checked_in_at: new Date().toISOString(),
+      source: 'admin',
+    },
+    { onConflict: 'student_id,class_date,period_number' }
+  );
+  if (error) throw error;
+}
+
 /** 관리자(키오스크): 현재 유효한 회전 토큰 발급 */
 export async function fetchCheckinToken(): Promise<string> {
   const { data, error } = await supabase.rpc('current_checkin_token');

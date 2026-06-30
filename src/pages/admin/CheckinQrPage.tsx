@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { Spinner } from '@/components/ui/Spinner';
 import { useCurrentTime } from '@/hooks/useCurrentTime';
 import { useCheckinTokenQuery } from '@/features/checkin/hooks';
+import { ManualCheckinPanel } from '@/features/checkin/components/ManualCheckinPanel';
 import { ADMIN_PATHS } from '@/routes/paths';
 
 export default function CheckinQrPage() {
@@ -31,7 +32,8 @@ export default function CheckinQrPage() {
   const dateLabel = now.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
 
   return (
-    <div className="flex flex-col items-center justify-center gap-6 py-8">
+    <div className="flex flex-col items-start justify-center gap-8 py-8 lg:flex-row">
+      <div className="flex flex-1 flex-col items-center gap-6">
       <div className="text-center">
         <h1 className="text-2xl font-bold text-gray-800">등·하원 체크인</h1>
         <p className="mt-1 text-gray-500">아래 QR을 휴대폰 카메라로 스캔하세요</p>
@@ -62,6 +64,12 @@ export default function CheckinQrPage() {
         <p>· QR은 보안을 위해 자동으로 갱신됩니다. (현장에서만 체크인 가능)</p>
         <p>· 학생은 본인 계정으로 로그인된 상태여야 합니다.</p>
         <p>· 첫 스캔은 <b>등원</b>, 다시 스캔하면 <b>하원</b>으로 처리됩니다.</p>
+      </div>
+      </div>
+
+      {/* 우측: QR을 못 찍은 학생을 직접 등원 처리 */}
+      <div className="w-full lg:w-96 lg:flex-shrink-0">
+        <ManualCheckinPanel />
       </div>
     </div>
   );
