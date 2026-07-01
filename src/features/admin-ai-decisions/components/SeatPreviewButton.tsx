@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { AIDecisionRow } from '../types';
 import {
@@ -8,10 +8,52 @@ import {
   PREVIEW_DURATION_SECONDS,
   type PreviewDisplayState,
 } from '../previewTypes';
+import { getPreviewBridgeBaseUrl, fetchSeatPreview, type BridgePreviewFields } from '../previewBridge';
 
 interface Props {
   row: AIDecisionRow;
   nowMs: number;
+  seatId: string;
+}
+
+/**
+ * 로컬 bridge(VITE_LOCAL_PREVIEW_BRIDGE_URL)에서 좌석 preview 필드를 가져온다.
+ * - bridge URL 미설정 → { fields: null, errored: false } (기존 row 기반 표시 유지)
+ * - fetch 실패 → errored=true (호출부에서 preview_error 표시)
+ */
+function useBridgePreview(seatId: string): { fields: BridgePreviewFields | null; errored: boolean } {
+  const base = getPreviewBridgeBaseUrl();
+  const [fields, setFields] = useState<BridgePreviewFields | null>(null);
+  const [errored, setErrored] = useState(false);
+
+  useEffect(() => {
+    if (!base) {
+      setFields(null);
+      setErrored(false);
+      return;
+    }
+    const ctrl = new AbortController();
+    let alive = true;
+    fetchSeatPreview(base, seatId, ctrl.signal)
+      .then((f) => {
+        if (alive) {
+          setFields(f);
+          setErrored(false);
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setFields(null);
+          setErrored(true);
+        }
+      });
+    return () => {
+      alive = false;
+      ctrl.abort();
+    };
+  }, [base, seatId]);
+
+  return { fields, errored };
 }
 
 // 상태별 뱃지 색(재생 불가 상태 표시용)
@@ -31,17 +73,26 @@ const STATE_BADGE_CLASS: Record<PreviewDisplayState, string> = {
  *
  * ⚠️ 실제 재생은 로컬 노트북에서만 가능(로컬 임시 클립). 영상은 DB에 저장하지 않는다.
  */
-export function SeatPreviewButton({ row, nowMs }: Props) {
+export function SeatPreviewButton({ row, nowMs, seatId }: Props) {
   const [open, setOpen] = useState(false);
-  const state = derivePreviewState(row, nowMs);
+  const { fields: bridgeFields, errored: bridgeErrored } = useBridgePreview(seatId);
+
+  // bridge 값이 row 의 preview_* 를 보완(override). 실패 시 error 로 표시.
+  const effectiveRow: AIDecisionRow = bridgeErrored
+    ? { ...row, preview_status: 'error' }
+    : bridgeFields
+      ? { ...row, ...bridgeFields }
+      : row;
+
+  const state = derivePreviewState(effectiveRow, nowMs);
   const label = PREVIEW_STATE_LABEL[state];
-  const canPlay = state === 'preview_available' && Boolean(row.preview_clip_url);
+  const canPlay = state === 'preview_available' && Boolean(effectiveRow.preview_clip_url);
 
   return (
     <div className="mt-2 border-t border-gray-200/70 pt-2" data-testid="seat-preview">
       <div className="flex flex-wrap items-center justify-between gap-1">
         <span className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
-          최근 {row.preview_duration_seconds ?? PREVIEW_DURATION_SECONDS}초 미리보기
+          최근 {effectiveRow.preview_duration_seconds ?? PREVIEW_DURATION_SECONDS}초 미리보기
         </span>
         {canPlay ? (
           <button
@@ -62,7 +113,7 @@ export function SeatPreviewButton({ row, nowMs }: Props) {
       {canPlay && open && (
         <video
           data-testid="seat-preview-video"
-          src={row.preview_clip_url}
+          src={effectiveRow.preview_clip_url}
           controls
           preload="none"
           playsInline

@@ -135,7 +135,7 @@ function AIDecisionSeatCardInner({ seatId, row, nowMs, onOpen, candidate, onOpen
       )}
 
       {/* 3층: 최근 5초 미리보기(관리자 확인용, 로컬 임시 클립) */}
-      <SeatPreviewButton row={row} nowMs={nowMs} />
+      <SeatPreviewButton row={row} nowMs={nowMs} seatId={seatId} />
     </div>
   );
 }
