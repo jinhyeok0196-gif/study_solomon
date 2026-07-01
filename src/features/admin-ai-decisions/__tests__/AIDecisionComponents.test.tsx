@@ -41,6 +41,22 @@ describe('AIDecisionSeatCard', () => {
     render(<AIDecisionSeatCard seatId="Seat3" row={null} nowMs={Date.now()} onOpen={vi.fn()} />);
     expect(screen.getByText('AI 판정 없음')).toBeInTheDocument();
   });
+
+  it('UNKNOWN 이고 카메라/품질 성공이면 "카메라 연결 성공 · 판정 신호 부족" 을 구분 표시한다', () => {
+    render(
+      <AIDecisionSeatCard
+        seatId="Seat1"
+        row={row({
+          activity: 'UNKNOWN', confidence: 0, status: 'LOW_CONFIDENCE',
+          reasons: ['human/objects 사실이 모두 비어 판정 불가'],
+          quality: { overall_quality: 1.0, vision_quality: 1.0, usable_for_rule_engine: true },
+        })}
+        nowMs={Date.now()}
+        onOpen={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('카메라 연결 성공 · 판정 신호 부족')).toBeInTheDocument();
+  });
 });
 
 describe('AIDecisionSeatGrid', () => {

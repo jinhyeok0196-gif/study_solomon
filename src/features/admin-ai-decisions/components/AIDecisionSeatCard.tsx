@@ -7,6 +7,7 @@ import {
   overallQuality,
   minutesSince,
   isStale,
+  unknownSignalHint,
   LOW_CONFIDENCE_THRESHOLD,
   type AIDecisionRow,
 } from '../types';
@@ -45,6 +46,7 @@ function AIDecisionSeatCardInner({ seatId, row, nowMs, onOpen, candidate, onOpen
   const stale = isStale(row.decided_at, nowMs);
   const lowConf = (row.confidence ?? 0) < LOW_CONFIDENCE_THRESHOLD;
   const topReason = row.reasons?.[0];
+  const unknownHint = unknownSignalHint(row);
 
   return (
     <div className={cn('flex flex-col rounded-xl border-2 p-3', cfg.cardClass)}>
@@ -67,6 +69,15 @@ function AIDecisionSeatCardInner({ seatId, row, nowMs, onOpen, candidate, onOpen
         <span className="font-semibold text-gray-700">{pct}%</span>
         <span className={cn('rounded px-1 py-0.5 font-medium', sev.badgeClass)}>{sev.label}</span>
       </div>
+
+      {/* UNKNOWN 원인 힌트: 카메라 연결 성공 / 판정 신호 부족 구분 */}
+      {unknownHint && (
+        <div className="mt-1 flex justify-center">
+          <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-700">
+            {unknownHint}
+          </span>
+        </div>
+      )}
 
       {/* 경고 플래그 */}
       {(stale || lowConf) && (

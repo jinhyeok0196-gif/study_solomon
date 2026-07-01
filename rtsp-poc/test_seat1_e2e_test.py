@@ -150,6 +150,89 @@ def test_existing_modules_intact():
     print("PASS intact: RuleEngine/Fusion/Storage 동작 유지")
 
 
+# ---- preflight cameras.yaml enabled 파싱 ----------------------------------
+def test_truthy_string_bool():
+    assert e2e._truthy(True) is True
+    assert e2e._truthy(False) is False
+    assert e2e._truthy("true") is True
+    assert e2e._truthy("false") is False        # 문자열 "false" 는 반드시 False
+    assert e2e._truthy("True") is True
+    assert e2e._truthy("yes") is True
+    assert e2e._truthy(0) is False
+    assert e2e._truthy(1) is True
+    assert e2e._truthy(None) is False
+    print("PASS truthy: 문자열/불리언 혼동 방어")
+
+
+def test_read_seat_enabled_list_form():
+    here = os.path.dirname(os.path.abspath(__file__))
+    cam = os.path.join(here, "cameras.yaml")   # 실제 list 형식 (Seat1=true, 나머지 false)
+    enabled, note = e2e.read_seat_enabled(cam, "Seat1")
+    assert enabled is True and note == ""       # 회귀 방지: 리스트 형식에서 true 인식
+    enabled2, _ = e2e.read_seat_enabled(cam, "Seat2")
+    assert enabled2 is False                     # 실제 false 좌석
+    enabled3, note3 = e2e.read_seat_enabled(cam, "Seat99")
+    assert enabled3 is None and "항목 없음" in note3
+    enabled4, note4 = e2e.read_seat_enabled(os.path.join(here, "no_such.yaml"), "Seat1")
+    assert enabled4 is None and note4 == "파일 없음"
+    print("PASS read_seat_enabled: list 형식 Seat1=true OK / 없음·실패 구분")
+
+
+def test_preflight_reports_enabled_ok():
+    rows = e2e.preflight("Seat1", save=False, fake=True)
+    msgs = [m for _l, m in rows]
+    # Seat1 은 enabled=true → OK 로 표시(더 이상 enabled=false 오표시 없음)
+    assert any(lvl == "OK" and "cameras.yaml Seat1 enabled=true" in m for lvl, m in rows), msgs
+    assert not any("cameras.yaml Seat1 enabled=false" in m for m in msgs)
+    print("PASS preflight_enabled: Seat1 enabled=true → OK")
+
+
+# ---- debug metrics --------------------------------------------------------
+_ALLOWED_DEBUG_KEYS = {
+    "reason_code", "no_fact_reason", "roi_id", "roi_name", "selected_roi", "roi_applied",
+    "brightness", "edge_score", "blur_score", "contrast", "motion_score",
+    "frame_quality", "overall_quality", "usable_for_rule_engine",
+    "frames_received", "frames_analyzed", "usable_frame_count",
+    "discarded_frames", "discard_reasons", "analysis_window_seconds",
+    "fact_count", "human_fact_count", "object_fact_count",
+    "present_sources", "missing_sources",
+}
+
+
+def test_debug_metrics_opencv_only_no_detection_engine():
+    runner = e2e.Seat1E2ERunner(seat="Seat1", engines=["opencv"], fake=True, debug_metrics=True)
+    r = runner.run_once()
+    dbg = r["debug_metrics"]
+    assert dbg is not None
+    # 키가 허용된 수치/텍스트 메트릭만(이미지/프레임 키 없음)
+    assert set(dbg).issubset(_ALLOWED_DEBUG_KEYS), set(dbg) - _ALLOWED_DEBUG_KEYS
+    # opencv 만 → 사람/객체 fact 0 → 탐지 엔진 미실행으로 구분
+    assert dbg["reason_code"] == "NO_DETECTION_ENGINE"
+    assert dbg["human_fact_count"] == 0 and dbg["object_fact_count"] == 0
+    assert dbg["frames_received"] > 0 and dbg["frames_analyzed"] > 0   # 카메라/프레임 성공
+    assert dbg["present_sources"] == ["opencv"]
+    print("PASS debug_metrics: opencv-only → NO_DETECTION_ENGINE(카메라 성공/신호 부족)")
+
+
+def test_debug_metrics_determined_when_all_engines():
+    runner = e2e.Seat1E2ERunner(seat="Seat1", engines=["opencv", "mediapipe", "yolo"],
+                                fake=True, debug_metrics=True)
+    r = runner.run_once()
+    dbg = r["debug_metrics"]
+    assert dbg["reason_code"] == "DETERMINED"       # STUDYING 판정됨
+    assert dbg["fact_count"] > 0
+    print("PASS debug_metrics: 전체 엔진 → DETERMINED")
+
+
+def test_debug_metrics_off_by_default():
+    runner = e2e.Seat1E2ERunner(seat="Seat1", engines=["opencv"], fake=True)
+    r = runner.run_once()
+    assert r["debug_metrics"] is None               # 기본 꺼짐(부하/노이즈 방지)
+    args = e2e.parse_args(["--single", "--debug-metrics"])
+    assert args.debug_metrics is True               # CLI 노출
+    print("PASS debug_metrics: 기본 꺼짐 + --debug-metrics 노출")
+
+
 def main():
     test_mask_rtsp()
     test_preflight_safe_and_no_secret()
@@ -162,8 +245,15 @@ def main():
     test_camera_seconds_option()
     test_no_side_effects_in_source()
     test_existing_modules_intact()
+    test_truthy_string_bool()
+    test_read_seat_enabled_list_form()
+    test_preflight_reports_enabled_ok()
+    test_debug_metrics_opencv_only_no_detection_engine()
+    test_debug_metrics_determined_when_all_engines()
+    test_debug_metrics_off_by_default()
     print("\nALL PASS: mask / preflight / single / skipped_engine / no_save / save / "
-          "save_fail / duration / no_side_effects / intact")
+          "save_fail / duration / no_side_effects / intact / truthy / read_seat_enabled / "
+          "preflight_enabled / debug_metrics")
 
 
 if __name__ == "__main__":

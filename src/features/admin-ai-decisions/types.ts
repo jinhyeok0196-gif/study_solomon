@@ -126,3 +126,20 @@ export function minutesSince(iso: string, nowMs: number): number {
 export function isStale(iso: string, nowMs: number): boolean {
   return minutesSince(iso, nowMs) >= STALE_MINUTES;
 }
+
+/**
+ * UNKNOWN 판정의 원인을 "카메라 연결 성공 / 판정 신호 부족" 관점으로 구분한다.
+ * (읽기 전용 보조 표시일 뿐 — 학생 상태/출결/벌점은 자동 변경되지 않는다.)
+ *
+ * 반환:
+ *  - UNKNOWN 이 아니면 null
+ *  - vision_quality > 0 (프레임·품질 성공) → '카메라 연결 성공 · 판정 신호 부족'
+ *  - 그 외 → '판정 신호 부족'
+ */
+export function unknownSignalHint(row: AIDecisionRow): string | null {
+  if (row.activity !== 'UNKNOWN') return null;
+  const q = row.quality ?? {};
+  const visionQ = q['vision_quality'];
+  const cameraOk = typeof visionQ === 'number' && visionQ > 0;
+  return cameraOk ? '카메라 연결 성공 · 판정 신호 부족' : '판정 신호 부족';
+}
