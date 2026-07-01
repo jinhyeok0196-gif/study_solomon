@@ -12,3 +12,14 @@ models/
 
 # Seat1 E2E 결과(JSON)는 로컬 산출물 — 레포에 포함하지 않는다.
 logs/
+
+# v0.5 로컬 임시 미리보기 클립 — 관리자 확인용, 영구 저장/커밋 금지.
+temp/
+previews/
+*.mp4
+*.webm
+*.avi
+*.mkv
+*.jpg
+*.jpeg
+*.png

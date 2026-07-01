@@ -77,6 +77,60 @@ describe('AIDecisionSeatCard', () => {
     // object-only 우선 표시이므로 일반 신호부족 문구는 나오지 않는다
     expect(screen.queryByText('카메라 연결 성공 · 판정 신호 부족')).toBeNull();
   });
+
+  // ── v0.5 미리보기 클립 ────────────────────────────────────────────────
+  it('preview 데이터가 없으면 "미리보기 준비 안 됨" 을 표시한다', () => {
+    render(<AIDecisionSeatCard seatId="Seat1" row={row()} nowMs={Date.now()} onOpen={vi.fn()} />);
+    expect(screen.getByText('미리보기 준비 안 됨')).toBeInTheDocument();
+    // 원칙 문구 노출("· " 접두사 포함되므로 부분 매칭)
+    expect(screen.getByText(/영상은 영구 저장되지 않음/)).toBeInTheDocument();
+  });
+
+  it('preview_clip_url 이 있으면 "최근 5초 보기" 버튼을 표시한다', () => {
+    render(
+      <AIDecisionSeatCard
+        seatId="Seat1"
+        row={row({
+          preview_status: 'available',
+          preview_clip_url: 'blob:local/preview-seat1',
+          preview_expires_at: new Date(Date.now() + 60_000).toISOString(),
+          preview_duration_seconds: 5,
+        })}
+        nowMs={Date.now()}
+        onOpen={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('button', { name: '최근 5초 보기' })).toBeInTheDocument();
+  });
+
+  it('preview_status=expired 또는 만료시각 초과면 "미리보기 만료됨" 을 표시한다', () => {
+    render(
+      <AIDecisionSeatCard
+        seatId="Seat1"
+        row={row({
+          preview_status: 'available',
+          preview_clip_url: 'blob:local/preview-seat1',
+          preview_expires_at: new Date(Date.now() - 1_000).toISOString(), // 이미 만료
+        })}
+        nowMs={Date.now()}
+        onOpen={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('미리보기 만료됨')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '최근 5초 보기' })).toBeNull();
+  });
+
+  it('preview_status=error 이면 "미리보기 오류" 를 표시한다', () => {
+    render(
+      <AIDecisionSeatCard
+        seatId="Seat1"
+        row={row({ preview_status: 'error' })}
+        nowMs={Date.now()}
+        onOpen={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('미리보기 오류')).toBeInTheDocument();
+  });
 });
 
 describe('AIDecisionSeatGrid', () => {

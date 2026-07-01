@@ -15,6 +15,7 @@ import {
 } from '../types';
 import type { StabilizedCandidate } from '../stabilizedTypes';
 import { StabilizedCandidateBadge } from './StabilizedCandidateBadge';
+import { SeatPreviewButton } from './SeatPreviewButton';
 
 interface Props {
   seatId: string;
@@ -132,6 +133,9 @@ function AIDecisionSeatCardInner({ seatId, row, nowMs, onOpen, candidate, onOpen
           <StabilizedCandidateBadge candidate={candidate} onClick={onOpenCandidate} />
         </div>
       )}
+
+      {/* 3층: 최근 5초 미리보기(관리자 확인용, 로컬 임시 클립) */}
+      <SeatPreviewButton row={row} nowMs={nowMs} />
     </div>
   );
 }

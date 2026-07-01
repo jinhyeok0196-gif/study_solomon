@@ -9,6 +9,12 @@ export type Activity = 'STUDYING' | 'PHONE' | 'SLEEPING' | 'ABSENT' | 'UNKNOWN';
 export type DecisionStatus = 'SUCCESS' | 'SKIPPED' | 'FAILED' | 'LOW_CONFIDENCE';
 export type Severity = 'INFO' | 'WATCH' | 'WARNING' | 'CRITICAL';
 
+/**
+ * v0.5 미리보기 클립 상태(원시 값). 실제 영상 바이너리는 DB(ai_rule_decisions)에 저장하지 않는다.
+ * 로컬에서 생성된 임시 5초 클립의 참조/상태만 표현하며, 실제 재생은 로컬 노트북에서만 가능하다.
+ */
+export type PreviewStatus = 'available' | 'loading' | 'expired' | 'unavailable' | 'error';
+
 /** ai_rule_decisions 테이블 1행(DB 컬럼명 그대로). */
 export interface AIDecisionRow {
   id: string;
@@ -29,6 +35,15 @@ export interface AIDecisionRow {
   quality: Record<string, unknown>;
   metadata: Record<string, unknown>;
   created_at: string;
+
+  // ── v0.5 미리보기(옵션) ────────────────────────────────────────────────
+  // ⚠️ ai_rule_decisions SELECT 결과엔 없다(영상 바이너리 미저장). 로컬 preview
+  // 인덱스/메타에서 주입되는 optional 필드. 값이 없으면 "미리보기 준비 안 됨".
+  preview_clip_url?: string;          // 로컬에서 서빙되는 임시 클립 URL(로컬 전용)
+  preview_expires_at?: string;        // ISO — 이 시각 이후 만료(자동 삭제 대상)
+  preview_status?: PreviewStatus;     // 원시 상태
+  preview_generated_at?: string;      // ISO — 클립 생성 시각
+  preview_duration_seconds?: number;  // 클립 길이(초, 기본 5)
 }
 
 export interface AIDecisionFilters {
