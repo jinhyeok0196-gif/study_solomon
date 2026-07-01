@@ -196,6 +196,11 @@ _ALLOWED_DEBUG_KEYS = {
     "discarded_frames", "discard_reasons", "analysis_window_seconds",
     "fact_count", "human_fact_count", "object_fact_count",
     "present_sources", "missing_sources",
+    # v0.3 YOLO(object) 세부
+    "yolo_requested", "yolo_status", "yolo_model_available", "yolo_model_file",
+    "detected_object_count", "detected_labels", "normalized_labels",
+    "person_count", "phone_count", "book_count", "laptop_count", "tablet_count",
+    "top_object_confidence", "missing_detection_reason",
 }
 
 
@@ -233,6 +238,36 @@ def test_debug_metrics_off_by_default():
     print("PASS debug_metrics: 기본 꺼짐 + --debug-metrics 노출")
 
 
+def test_debug_metrics_object_fields_with_yolo():
+    # opencv,yolo fake(책+사람) → object 세부 메트릭이 채워지고 STUDYING 판정
+    runner = e2e.Seat1E2ERunner(seat="Seat1", engines=["opencv", "yolo"],
+                                fake=True, debug_metrics=True)
+    r = runner.run_once()
+    dbg = r["debug_metrics"]
+    assert set(dbg).issubset(_ALLOWED_DEBUG_KEYS), set(dbg) - _ALLOWED_DEBUG_KEYS
+    assert r["activity"] == "STUDYING"
+    assert dbg["reason_code"] == "DETERMINED"
+    assert dbg["yolo_requested"] is True and dbg["yolo_status"] == "SUCCESS"
+    assert dbg["object_fact_count"] > 0
+    assert dbg["book_count"] >= 1 and dbg["person_count"] >= 1
+    assert "book" in dbg["detected_labels"] and "person" in dbg["detected_labels"]
+    assert dbg["top_object_confidence"] and dbg["top_object_confidence"] > 0
+    # 검출됐으므로 missing 사유 없음
+    assert dbg["missing_detection_reason"] is None
+    print("PASS debug_metrics(object): yolo 세부 메트릭 + STUDYING")
+
+
+def test_debug_metrics_yolo_status_notrequested_opencv_only():
+    runner = e2e.Seat1E2ERunner(seat="Seat1", engines=["opencv"], fake=True, debug_metrics=True)
+    dbg = runner.run_once()["debug_metrics"]
+    assert dbg["yolo_requested"] is False
+    assert dbg["yolo_status"] == "NOT_REQUESTED"
+    assert dbg["detected_object_count"] == 0
+    assert isinstance(dbg["yolo_model_available"], bool)   # 존재 여부 bool(값/경로 비노출)
+    assert dbg["missing_detection_reason"]                 # opencv 단독 사유 표기
+    print("PASS debug_metrics(object): opencv 단독 → yolo NOT_REQUESTED")
+
+
 def main():
     test_mask_rtsp()
     test_preflight_safe_and_no_secret()
@@ -251,9 +286,11 @@ def main():
     test_debug_metrics_opencv_only_no_detection_engine()
     test_debug_metrics_determined_when_all_engines()
     test_debug_metrics_off_by_default()
+    test_debug_metrics_object_fields_with_yolo()
+    test_debug_metrics_yolo_status_notrequested_opencv_only()
     print("\nALL PASS: mask / preflight / single / skipped_engine / no_save / save / "
           "save_fail / duration / no_side_effects / intact / truthy / read_seat_enabled / "
-          "preflight_enabled / debug_metrics")
+          "preflight_enabled / debug_metrics / debug_metrics(object)")
 
 
 if __name__ == "__main__":

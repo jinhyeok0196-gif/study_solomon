@@ -242,6 +242,30 @@ def _load_roi(here: str, seat: str) -> Optional[dict]:
         return None
 
 
+def _yolo_model_status(here: str) -> Tuple[bool, str]:
+    """config/yolo.yaml 의 model.path 기준 실제 모델 파일 존재 여부.
+
+    반환 (available, basename). basename 만 노출(전체 경로 미노출).
+    모델 파일은 대용량이라 레포 미포함 → 로컬 배치 필요.
+    """
+    cfg_path = os.path.join(here, "config", "yolo.yaml")
+    model_rel = "models/yolo_object.pt"
+    try:
+        if os.path.exists(cfg_path):
+            import yaml
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                raw = yaml.safe_load(f) or {}
+            model_rel = ((raw.get("model") or {}).get("path")) or model_rel
+    except Exception:
+        pass
+    model_path = model_rel if os.path.isabs(model_rel) else os.path.join(here, model_rel)
+    return os.path.exists(model_path), os.path.basename(str(model_rel))
+
+
+def _int0(v: Any) -> int:
+    return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else 0
+
+
 def _count_present(d: Optional[dict]) -> int:
     """dict 에서 값이 None 이 아닌 항목 수(status 제외). fact 존재 여부 판단용."""
     if not d:
@@ -251,13 +275,16 @@ def _count_present(d: Optional[dict]) -> int:
 
 def build_debug_metrics(here: str, seat: str, engines: List[str], fake: bool,
                         camera_seconds: float, burst: Any, fusion_result: Any,
-                        decision: Any) -> Dict[str, Any]:
+                        decision: Any,
+                        engine_statuses: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """UNKNOWN 반복 시 원인을 구분할 수 있는 수치/텍스트 메트릭을 만든다.
 
     이미지/프레임 저장 없음. reason_code 로 아래를 구분한다:
       프레임 없음 / 프레임은 있으나 유효 0 / 품질 낮음 /
       탐지 엔진 미실행 / 탐지 신호 없음 / 신호 충돌 / 활동 신호 없음.
+    YOLO(object) 세부 메트릭도 함께 제공한다(수치/텍스트만).
     """
+    engine_statuses = dict(engine_statuses or {})
     sf = getattr(fusion_result, "seat_facts", None)
     vision = (getattr(sf, "vision", {}) or {}) if sf else {}
     human = (getattr(sf, "human", {}) or {}) if sf else {}
@@ -280,6 +307,38 @@ def build_debug_metrics(here: str, seat: str, engines: List[str], fake: bool,
     object_fact_count = _count_present(objects)
     fact_count = human_fact_count + object_fact_count
     detection_requested = any(e in ("mediapipe", "yolo") for e in engines)
+    # 탐지 엔진이 "실제로 돌았는가"(SKIPPED/모델없음과 구분)
+    detection_ran = any(engine_statuses.get(e) in (ENG_SUCCESS, ENG_FAILED)
+                        for e in ("mediapipe", "yolo"))
+
+    # ---- YOLO(object) 세부 메트릭 ----
+    object_counts = objects.get("object_counts", {}) or {}
+    detected_labels = sorted(k for k, v in object_counts.items() if _int0(v) > 0)
+    detected_object_count = _int0(objects.get("detected_objects_count")) \
+        or sum(_int0(v) for v in object_counts.values())
+    person_count = _int0(objects.get("max_person_count"))
+    phone_count = _int0(objects.get("phone_detection_count"))
+    book_count = _int0(objects.get("book_detection_count"))
+    laptop_count = _int0(objects.get("laptop_detection_count"))
+    tablet_count = _int0(objects.get("tablet_detection_count"))
+    top_object_confidence = objects.get("max_detection_confidence")
+    yolo_requested = "yolo" in engines
+    yolo_status = engine_statuses.get("yolo") or ("NOT_REQUESTED" if not yolo_requested else "UNKNOWN")
+    yolo_available, yolo_file = _yolo_model_status(here)
+
+    # 탐지 신호가 왜 없는지(진단용 텍스트)
+    missing_detection_reason: Optional[str] = None
+    if object_fact_count == 0 and human_fact_count == 0:
+        if yolo_requested and yolo_status == ENG_SKIPPED:
+            missing_detection_reason = (
+                f"yolo=SKIPPED (모델 없음/ultralytics 미설치 추정). "
+                f"models/{yolo_file} 로컬 배치 필요")
+        elif yolo_requested and yolo_status == ENG_FAILED:
+            missing_detection_reason = "yolo=FAILED (backend 예외 - errors 확인)"
+        elif not detection_requested:
+            missing_detection_reason = "탐지 엔진(mediapipe/yolo) 미요청 - opencv 단독 실행"
+    elif object_fact_count > 0 and detected_object_count == 0:
+        missing_detection_reason = "objects fact 는 있으나 실제 검출 객체 0 (장면에 대상 객체 없음)"
 
     activity = getattr(decision, "activity", "UNKNOWN")
     reasons = getattr(decision, "reasons", []) or []
@@ -301,9 +360,11 @@ def build_debug_metrics(here: str, seat: str, engines: List[str], fake: bool,
         code = "LOW_QUALITY"
         no_fact_reason = f"판정 재료 품질 부족(overall_quality={overall_q} < {min_q})"
     elif human_fact_count == 0 and object_fact_count == 0:
-        if not detection_requested:
+        # 탐지 엔진이 아예 안 돌았거나(미요청/모델없음 SKIPPED) → 엔진 부재로 진단
+        if not detection_requested or not detection_ran:
             code = "NO_DETECTION_ENGINE"
-            no_fact_reason = ("카메라 연결·프레임 수신·OpenCV 품질검사는 성공했으나 "
+            no_fact_reason = (missing_detection_reason or
+                              "카메라 연결·프레임 수신·OpenCV 품질검사는 성공했으나 "
                               "사람/객체 탐지 엔진(MediaPipe/YOLO) 미실행으로 human/object fact 없음. "
                               "OpenCV 엔진은 설계상 활동/사람/객체를 판별하지 않음(전처리·품질 전용).")
         else:
@@ -344,6 +405,21 @@ def build_debug_metrics(here: str, seat: str, engines: List[str], fake: bool,
         "object_fact_count": object_fact_count,
         "present_sources": fmeta.get("present_sources"),
         "missing_sources": list(getattr(fusion_result, "missing_sources", []) or []),
+        # ---- YOLO(object) 세부 ----
+        "yolo_requested": yolo_requested,
+        "yolo_status": yolo_status,
+        "yolo_model_available": yolo_available,
+        "yolo_model_file": yolo_file,
+        "detected_object_count": detected_object_count,
+        "detected_labels": detected_labels,
+        "normalized_labels": detected_labels,
+        "person_count": person_count,
+        "phone_count": phone_count,
+        "book_count": book_count,
+        "laptop_count": laptop_count,
+        "tablet_count": tablet_count,
+        "top_object_confidence": top_object_confidence,
+        "missing_detection_reason": missing_detection_reason,
     }
 
 
@@ -496,7 +572,8 @@ class Seat1E2ERunner:
             if self.debug_metrics:
                 here = os.path.dirname(os.path.abspath(__file__))
                 dbg = build_debug_metrics(here, self.seat, self.engines, self.fake,
-                                          self.camera_seconds, burst, fr, decision)
+                                          self.camera_seconds, burst, fr, decision,
+                                          engine_statuses=engine_statuses)
         finally:
             self._shutdown_camera()
 
@@ -614,12 +691,14 @@ def preflight(seat: str, save: bool, fake: bool) -> List[Tuple[str, str]]:
     else:
         warn("config/mediapipe.yaml 없음 - MediaPipe SKIPPED")
 
-    # 10) YOLO config/model
+    # 10) YOLO config/model (config 의 model.path 기준으로 존재 여부 확인)
     yolo_yaml = os.path.join(here, "config", "yolo.yaml")
-    yolo_model = os.path.join(here, "models", "yolo_object.pt")
     if os.path.exists(yolo_yaml):
-        ok("config/yolo.yaml 존재") if os.path.exists(yolo_model) \
-            else warn("YOLO 모델 없음(models/*.pt) - SKIPPED 처리됨")
+        yolo_available, yolo_file = _yolo_model_status(here)
+        if yolo_available:
+            ok(f"config/yolo.yaml 존재 + YOLO 모델 있음(models/{yolo_file})")
+        else:
+            warn(f"YOLO 모델 없음(models/{yolo_file}) - SKIPPED 처리됨, 로컬 배치 필요")
     else:
         warn("config/yolo.yaml 없음 - YOLO SKIPPED")
 
@@ -691,6 +770,11 @@ def _print_debug_metrics(dbg: Dict[str, Any]) -> None:
         "discarded_frames", "discard_reasons", "analysis_window_seconds",
         "fact_count", "human_fact_count", "object_fact_count",
         "present_sources", "missing_sources",
+        # ---- YOLO(object) 세부 ----
+        "yolo_requested", "yolo_status", "yolo_model_available", "yolo_model_file",
+        "detected_object_count", "detected_labels", "normalized_labels",
+        "person_count", "phone_count", "book_count", "laptop_count", "tablet_count",
+        "top_object_confidence", "missing_detection_reason",
     ]
     for k in order:
         if k in dbg:
