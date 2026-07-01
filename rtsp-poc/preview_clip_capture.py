@@ -54,6 +54,11 @@ STATUS_EXPIRED = "expired"
 STATUS_UNAVAILABLE = "unavailable"
 STATUS_ERROR = "error"
 
+# 메타데이터 note 문구는 **ASCII 영문**으로 고정한다.
+# (Windows PowerShell 기본 인코딩(cp949 등)에서 한글이 깨지는 문제 방지 — v0.5.1)
+PREVIEW_NOTE = ("admin preview only; temporary clip; not stored in DB; "
+                "no automatic status change")
+
 
 # ============================================================ 보안/마스킹
 def mask_rtsp(url: Optional[str]) -> str:
@@ -90,7 +95,7 @@ def build_metadata(seat: str, status: str, *, generated_at: datetime,
         "frame_count": int(frame_count),
         "fps": round(float(fps), 2),
         "clip_filename": clip_filename if status == STATUS_AVAILABLE else None,
-        "note": "관리자 확인용 임시 클립 · 영구 저장 안 함 · 자동 상태 변경 없음",
+        "note": PREVIEW_NOTE,          # ASCII 영문(Windows PowerShell 인코딩 안전)
     }
 
 
@@ -107,9 +112,14 @@ def is_expired(meta: Dict[str, Any], now: Optional[datetime] = None) -> bool:
 
 
 def write_meta(meta_path: str, meta: Dict[str, Any]) -> None:
+    """사이드카 메타 JSON 저장.
+
+    encoding="utf-8" 명시 + ensure_ascii=True 로 **파일을 순수 ASCII** 로 만든다.
+    → Windows PowerShell 기본 인코딩(cp949 등)에서도 깨지지 않는다(v0.5.1).
+    """
     os.makedirs(os.path.dirname(meta_path), exist_ok=True)
     with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump(meta, f, ensure_ascii=False, indent=2)
+        json.dump(meta, f, ensure_ascii=True, indent=2)
 
 
 def read_meta(meta_path: str) -> Optional[Dict[str, Any]]:
@@ -265,7 +275,7 @@ def main(argv=None) -> int:
     for k in ("seat_id", "status", "generated_at", "expires_at",
               "duration_seconds", "frame_count", "fps", "clip_filename"):
         print(f"  {k} = {meta.get(k)}")
-    print("  ※ 관리자 확인용 임시 클립 · DB 미저장 · 영구 저장 안 함 · 자동 상태 변경 없음")
+    print(f"  note: {PREVIEW_NOTE}")
     return 0
 
 
