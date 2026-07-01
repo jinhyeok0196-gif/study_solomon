@@ -44,6 +44,11 @@ export interface AIDecisionRow {
   preview_status?: PreviewStatus;     // 원시 상태
   preview_generated_at?: string;      // ISO — 클립 생성 시각
   preview_duration_seconds?: number;  // 클립 길이(초, 기본 5)
+  // v0.6-pre.1: 브라우저 재생 호환(H.264 여부)
+  preview_codec?: string;             // "h264" | "mp4v"
+  preview_browser_compatible?: boolean;
+  preview_transcode_status?: string;  // "success" | "ffmpeg_missing" | "failed"
+  preview_codec_warning?: string;
 }
 
 export interface AIDecisionFilters {

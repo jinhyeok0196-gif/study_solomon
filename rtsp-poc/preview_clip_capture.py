@@ -45,6 +45,7 @@ DEFAULT_OUT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tem
 DEFAULT_DURATION_SECONDS = 5.0
 DEFAULT_TTL_SECONDS = 120.0          # 짧게 — 관리자 확인용, 오래 남기지 않는다
 CLIP_FILENAME = "latest.mp4"
+CAPTURE_TMP_FILENAME = "capture_tmp.mp4"   # cv2(mp4v) 원본 — 변환 후 삭제
 META_FILENAME = "latest.json"
 
 # preview 상태(프론트 PreviewStatus 와 동일 어휘)
@@ -53,6 +54,14 @@ STATUS_LOADING = "loading"
 STATUS_EXPIRED = "expired"
 STATUS_UNAVAILABLE = "unavailable"
 STATUS_ERROR = "error"
+
+# 코덱/트랜스코딩 상태(v0.6-pre.1: 브라우저 <video> 재생 호환)
+CODEC_H264 = "h264"
+CODEC_MP4V = "mp4v"
+TRANSCODE_SUCCESS = "success"
+TRANSCODE_FFMPEG_MISSING = "ffmpeg_missing"
+TRANSCODE_FAILED = "failed"
+CODEC_WARNING = "mp4v may not play correctly in browser video tag"
 
 # 메타데이터 note 문구는 **ASCII 영문**으로 고정한다.
 # (Windows PowerShell 기본 인코딩(cp949 등)에서 한글이 깨지는 문제 방지 — v0.5.1)
@@ -75,17 +84,36 @@ def clip_paths(out_root: str, seat: str) -> Tuple[str, str, str]:
     return seat_dir, os.path.join(seat_dir, CLIP_FILENAME), os.path.join(seat_dir, META_FILENAME)
 
 
+def make_codec_info(codec: Optional[str], browser_compatible: Optional[bool],
+                    transcode_status: Optional[str],
+                    codec_warning: Optional[str] = None) -> Dict[str, Any]:
+    """코덱/트랜스코딩 결과를 메타/응답에 넣을 dict 로."""
+    info: Dict[str, Any] = {
+        "codec": codec,
+        "browser_compatible": browser_compatible,
+        "transcode_status": transcode_status,
+    }
+    if codec_warning:
+        info["codec_warning"] = codec_warning
+    return info
+
+
 def build_metadata(seat: str, status: str, *, generated_at: datetime,
                    duration_seconds: float = DEFAULT_DURATION_SECONDS,
                    ttl_seconds: float = DEFAULT_TTL_SECONDS,
                    frame_count: int = 0, fps: float = 0.0,
-                   clip_filename: Optional[str] = None) -> Dict[str, Any]:
+                   clip_filename: Optional[str] = None,
+                   codec: Optional[str] = None,
+                   browser_compatible: Optional[bool] = None,
+                   transcode_status: Optional[str] = None,
+                   codec_warning: Optional[str] = None) -> Dict[str, Any]:
     """프론트 preview 필드의 원천이 되는 사이드카 메타데이터(영상 바이너리 아님).
 
     ⚠️ 실제 파일 경로/URL 은 넣지 않는다(로컬 서빙 레이어가 결정). 파일명만 남긴다.
+    codec/browser_compatible/transcode_status 는 브라우저 재생 호환 정보(v0.6-pre.1).
     """
     expires_at = generated_at + timedelta(seconds=max(0.0, float(ttl_seconds)))
-    return {
+    meta: Dict[str, Any] = {
         "seat_id": seat,
         "status": status,
         "generated_at": generated_at.isoformat(),
@@ -95,8 +123,14 @@ def build_metadata(seat: str, status: str, *, generated_at: datetime,
         "frame_count": int(frame_count),
         "fps": round(float(fps), 2),
         "clip_filename": clip_filename if status == STATUS_AVAILABLE else None,
+        "codec": codec,
+        "browser_compatible": browser_compatible,
+        "transcode_status": transcode_status,
         "note": PREVIEW_NOTE,          # ASCII 영문(Windows PowerShell 인코딩 안전)
     }
+    if codec_warning:
+        meta["codec_warning"] = codec_warning
+    return meta
 
 
 def is_expired(meta: Dict[str, Any], now: Optional[datetime] = None) -> bool:
@@ -130,6 +164,77 @@ def read_meta(meta_path: str) -> Optional[Dict[str, Any]]:
             return json.load(f)
     except (OSError, ValueError):
         return None
+
+
+# ============================================================ H.264 트랜스코딩(브라우저 호환)
+def find_ffmpeg() -> Optional[str]:
+    """ffmpeg 실행 파일 경로. 시스템 ffmpeg → imageio_ffmpeg 순으로 탐색. 없으면 None."""
+    import shutil
+    exe = shutil.which("ffmpeg")
+    if exe:
+        return exe
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+
+def transcode_to_h264(ffmpeg: str, raw_path: str, out_path: str) -> bool:
+    """raw(mp4v) → H.264 mp4(브라우저 호환)로 변환. 성공하면 True.
+
+    ffmpeg -y -i <raw> -c:v libx264 -pix_fmt yuv420p -movflags +faststart <out>
+    """
+    import subprocess
+    cmd = [ffmpeg, "-y", "-i", raw_path, "-c:v", "libx264",
+           "-pix_fmt", "yuv420p", "-movflags", "+faststart", out_path]
+    try:
+        proc = subprocess.run(cmd, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, timeout=120)
+    except Exception:
+        return False
+    return (proc.returncode == 0 and os.path.exists(out_path)
+            and os.path.getsize(out_path) > 0)
+
+
+def _safe_remove(path: str) -> None:
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except OSError:
+        pass
+
+
+def finalize_clip(raw_path: str, clip_path: str,
+                  ffmpeg: Optional[str] = None,
+                  transcoder=None) -> Dict[str, Any]:
+    """캡처 원본(raw, mp4v)을 최종 clip_path 로 만든다.
+
+    - ffmpeg 가능 + 변환 성공 → H.264(browser_compatible=True), raw 삭제.
+    - ffmpeg 있으나 변환 실패 → raw 를 그대로 사용(mp4v, browser_compatible=False, failed).
+    - ffmpeg 없음 → raw 를 그대로 사용(mp4v, browser_compatible=False, ffmpeg_missing).
+    반환: codec_info dict. (ffmpeg/transcoder 주입으로 테스트 가능)
+    """
+    ffmpeg = ffmpeg if ffmpeg is not None else find_ffmpeg()
+    transcoder = transcoder or transcode_to_h264
+
+    if ffmpeg:
+        if transcoder(ffmpeg, raw_path, clip_path):
+            _safe_remove(raw_path)
+            return make_codec_info(CODEC_H264, True, TRANSCODE_SUCCESS)
+        # 변환 실패 → raw(mp4v) 를 최종 파일로 대체
+        try:
+            os.replace(raw_path, clip_path)
+        except OSError:
+            pass
+        return make_codec_info(CODEC_MP4V, False, TRANSCODE_FAILED, CODEC_WARNING)
+
+    # ffmpeg 없음 → raw(mp4v) 를 최종 파일로
+    try:
+        os.replace(raw_path, clip_path)
+    except OSError:
+        pass
+    return make_codec_info(CODEC_MP4V, False, TRANSCODE_FFMPEG_MISSING, CODEC_WARNING)
 
 
 # ============================================================ Capturer
@@ -184,27 +289,41 @@ class PreviewClipCapturer:
 
         log.info("[preview %s] 캡처 시도 rtsp=%s dur=%.1fs (로컬 전용)",
                  self.seat, mask_rtsp(rtsp), self.duration_seconds)
+        raw_path = os.path.join(seat_dir, CAPTURE_TMP_FILENAME)
         try:
-            frame_count, fps = self._capture_to_mp4(rtsp, seat_dir, clip_path)
+            frame_count, fps = self._capture_to_mp4(rtsp, seat_dir, raw_path)  # 원본(mp4v)
         except Exception as exc:                 # cv2 없음/연결 실패 등
+            _safe_remove(raw_path)
             meta = build_metadata(self.seat, STATUS_ERROR, generated_at=datetime.now(),
                                   duration_seconds=self.duration_seconds, ttl_seconds=self.ttl_seconds)
             write_meta(meta_path, meta)
             log.warning("[preview %s] 캡처 실패: %s - error", self.seat, type(exc).__name__)
             return meta
 
-        status = STATUS_AVAILABLE if frame_count > 0 else STATUS_UNAVAILABLE
-        meta = build_metadata(self.seat, status, generated_at=datetime.now(),
+        if frame_count <= 0:
+            _safe_remove(raw_path)
+            meta = build_metadata(self.seat, STATUS_UNAVAILABLE, generated_at=datetime.now(),
+                                  duration_seconds=self.duration_seconds, ttl_seconds=self.ttl_seconds)
+            write_meta(meta_path, meta)
+            log.warning("[preview %s] frames=0 - unavailable", self.seat)
+            return meta
+
+        # 브라우저 재생 호환: 가능하면 H.264 로 변환, 아니면 mp4v fallback
+        codec_info = finalize_clip(raw_path, clip_path)
+        meta = build_metadata(self.seat, STATUS_AVAILABLE, generated_at=datetime.now(),
                               duration_seconds=self.duration_seconds, ttl_seconds=self.ttl_seconds,
-                              frame_count=frame_count, fps=fps,
-                              clip_filename=CLIP_FILENAME)
+                              frame_count=frame_count, fps=fps, clip_filename=CLIP_FILENAME,
+                              **codec_info)
         write_meta(meta_path, meta)
-        log.info("[preview %s] status=%s frames=%d fps=%.1f (clip=%s, 만료 %s)",
-                 self.seat, status, frame_count, fps, CLIP_FILENAME, meta["expires_at"])
+        log.info("[preview %s] status=available frames=%d fps=%.1f codec=%s browser_compatible=%s "
+                 "transcode=%s (clip=%s, 만료 %s)",
+                 self.seat, frame_count, fps, codec_info.get("codec"),
+                 codec_info.get("browser_compatible"), codec_info.get("transcode_status"),
+                 CLIP_FILENAME, meta["expires_at"])
         return meta
 
     def _capture_to_mp4(self, rtsp: str, seat_dir: str, clip_path: str) -> Tuple[int, float]:
-        """cv2 로 RTSP 를 열어 duration 초만큼 mp4 로 기록. (frame_count, fps).
+        """cv2 로 RTSP 를 열어 duration 초만큼 mp4(mp4v 원본)로 기록. (frame_count, fps).
 
         ⚠️ 프레임/이미지 개별 저장 없음 — mp4 임시 파일 하나만. cv2 는 여기서만 import.
         """
@@ -273,8 +392,10 @@ def main(argv=None) -> int:
     # 민감정보 없이 상태만 출력
     print("===== Preview Clip =====")
     for k in ("seat_id", "status", "generated_at", "expires_at",
-              "duration_seconds", "frame_count", "fps", "clip_filename"):
-        print(f"  {k} = {meta.get(k)}")
+              "duration_seconds", "frame_count", "fps", "clip_filename",
+              "codec", "browser_compatible", "transcode_status", "codec_warning"):
+        if k in meta:
+            print(f"  {k} = {meta.get(k)}")
     print(f"  note: {PREVIEW_NOTE}")
     return 0
 

@@ -16,6 +16,10 @@ export type BridgePreviewFields = Pick<
   | 'preview_generated_at'
   | 'preview_expires_at'
   | 'preview_duration_seconds'
+  | 'preview_codec'
+  | 'preview_browser_compatible'
+  | 'preview_transcode_status'
+  | 'preview_codec_warning'
 >;
 
 /** 환경변수에서 bridge 베이스 URL. 없으면 null(→ 로컬 미리보기 비활성). */
@@ -50,5 +54,12 @@ export async function fetchSeatPreview(
   if (typeof raw.preview_duration_seconds === 'number') {
     out.preview_duration_seconds = raw.preview_duration_seconds;
   }
+  // 코덱/브라우저 호환(bridge 는 prefix 없이 codec/browser_compatible/... 로 반환)
+  if (typeof raw.codec === 'string') out.preview_codec = raw.codec;
+  if (typeof raw.browser_compatible === 'boolean') {
+    out.preview_browser_compatible = raw.browser_compatible;
+  }
+  if (typeof raw.transcode_status === 'string') out.preview_transcode_status = raw.transcode_status;
+  if (typeof raw.codec_warning === 'string') out.preview_codec_warning = raw.codec_warning;
   return out;
 }

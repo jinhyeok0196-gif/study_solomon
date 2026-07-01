@@ -29,6 +29,9 @@ export const PREVIEW_STATE_LABEL: Record<PreviewDisplayState, string> = {
   preview_error: '미리보기 오류',
 };
 
+/** 브라우저 재생 호환(H.264) 변환이 필요할 때 관리자에게 보여줄 문구. */
+export const PREVIEW_CODEC_WARNING = '브라우저 재생 호환 변환이 필요합니다';
+
 /** 카드에 항상 노출하는 원칙 문구(개인정보/자동변경 없음). */
 export const PREVIEW_DISCLAIMERS: readonly string[] = [
   '관리자 확인용 미리보기',

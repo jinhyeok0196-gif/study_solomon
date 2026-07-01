@@ -90,6 +90,11 @@ def build_preview_response(out_root: str, seat: str, base_url: str,
         "preview_generated_at": None,
         "preview_expires_at": None,
         "preview_duration_seconds": None,
+        # 브라우저 재생 호환 정보(v0.6-pre.1)
+        "codec": None,
+        "browser_compatible": None,
+        "transcode_status": None,
+        "codec_warning": None,
     }
     if not is_safe_seat(seat):
         return resp
@@ -102,6 +107,10 @@ def build_preview_response(out_root: str, seat: str, base_url: str,
     resp["preview_generated_at"] = meta.get("generated_at")
     resp["preview_expires_at"] = meta.get("expires_at")
     resp["preview_duration_seconds"] = meta.get("duration_seconds")
+    resp["codec"] = meta.get("codec")
+    resp["browser_compatible"] = meta.get("browser_compatible")
+    resp["transcode_status"] = meta.get("transcode_status")
+    resp["codec_warning"] = meta.get("codec_warning")
 
     status = str(meta.get("status") or pc.STATUS_UNAVAILABLE)
     clip_abs = resolve_clip_path(out_root, seat)

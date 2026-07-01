@@ -21,13 +21,17 @@ import preview_bridge_server as bs
 
 
 # ---- 도우미 ---------------------------------------------------------------
-def _write_available(out_root, seat="Seat1", ttl=600.0, with_mp4=True, gen=None):
+def _write_available(out_root, seat="Seat1", ttl=600.0, with_mp4=True, gen=None,
+                     codec="h264", browser_compatible=True, transcode_status="success",
+                     codec_warning=None):
     _, clip_path, meta_path = pc.clip_paths(out_root, seat)
     os.makedirs(os.path.dirname(meta_path), exist_ok=True)
     meta = pc.build_metadata(seat, pc.STATUS_AVAILABLE,
                              generated_at=gen or datetime.now(),
                              ttl_seconds=ttl, frame_count=133, fps=25.0,
-                             clip_filename="latest.mp4")
+                             clip_filename="latest.mp4",
+                             codec=codec, browser_compatible=browser_compatible,
+                             transcode_status=transcode_status, codec_warning=codec_warning)
     pc.write_meta(meta_path, meta)
     if with_mp4:
         with open(clip_path, "wb") as f:
@@ -74,6 +78,24 @@ def test_build_preview_available():
         assert r["preview_duration_seconds"] == 5.0
         assert r["preview_expires_at"] and r["preview_generated_at"]
     print("PASS build_preview: json+mp4 있음 → available + clip_url")
+
+
+def test_build_preview_includes_codec_fields():
+    with tempfile.TemporaryDirectory() as d:
+        _write_available(d, "Seat1", codec="h264", browser_compatible=True,
+                         transcode_status="success")
+        r = bs.build_preview_response(d, "Seat1", "http://127.0.0.1:8765")
+        assert r["codec"] == "h264"
+        assert r["browser_compatible"] is True
+        assert r["transcode_status"] == "success"
+        # mp4v fallback 도 그대로 반영(browser_compatible=False + codec_warning)
+        _write_available(d, "Seat2", codec="mp4v", browser_compatible=False,
+                         transcode_status="ffmpeg_missing", codec_warning=pc.CODEC_WARNING)
+        r2 = bs.build_preview_response(d, "Seat2", "http://127.0.0.1:8765")
+        assert r2["codec"] == "mp4v" and r2["browser_compatible"] is False
+        assert r2["transcode_status"] == "ffmpeg_missing"
+        assert r2["codec_warning"] == pc.CODEC_WARNING
+    print("PASS build_preview: codec/browser_compatible/transcode_status 반환")
 
 
 def test_build_preview_unavailable_when_no_json():
@@ -188,6 +210,7 @@ def main():
     test_is_allowed_origin()
     test_resolve_clip_path_within_root()
     test_build_preview_available()
+    test_build_preview_includes_codec_fields()
     test_build_preview_unavailable_when_no_json()
     test_build_preview_expired()
     test_build_preview_available_status_but_no_mp4()

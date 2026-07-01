@@ -75,6 +75,51 @@ describe('SeatPreviewButton × local bridge', () => {
     expect(screen.queryByRole('button', { name: '최근 5초 보기' })).toBeNull();
   });
 
+  it('browser_compatible=false 면 "브라우저 재생 호환 변환이 필요합니다" 를 표시한다', async () => {
+    vi.stubEnv('VITE_LOCAL_PREVIEW_BRIDGE_URL', BRIDGE);
+    stubFetchOnce(() =>
+      Promise.resolve({
+        ok: true,
+        json: async () => ({
+          seat_id: 'Seat1',
+          preview_status: 'available',
+          preview_clip_url: `${BRIDGE}/previews/Seat1/latest.mp4`,
+          preview_expires_at: new Date(Date.now() + 60_000).toISOString(),
+          preview_duration_seconds: 5.0,
+          codec: 'mp4v',
+          browser_compatible: false,
+          transcode_status: 'ffmpeg_missing',
+          codec_warning: 'mp4v may not play correctly in browser video tag',
+        }),
+      }),
+    );
+    render(<AIDecisionSeatCard seatId="Seat1" row={row()} nowMs={Date.now()} onOpen={vi.fn()} />);
+    // available 이라 버튼은 뜨고, 호환 경고도 함께 표시된다
+    expect(await screen.findByRole('button', { name: '최근 5초 보기' })).toBeInTheDocument();
+    expect(screen.getByText(/브라우저 재생 호환 변환이 필요합니다/)).toBeInTheDocument();
+  });
+
+  it('browser_compatible=true(H.264) 면 호환 경고를 표시하지 않는다', async () => {
+    vi.stubEnv('VITE_LOCAL_PREVIEW_BRIDGE_URL', BRIDGE);
+    stubFetchOnce(() =>
+      Promise.resolve({
+        ok: true,
+        json: async () => ({
+          seat_id: 'Seat1',
+          preview_status: 'available',
+          preview_clip_url: `${BRIDGE}/previews/Seat1/latest.mp4`,
+          preview_expires_at: new Date(Date.now() + 60_000).toISOString(),
+          codec: 'h264',
+          browser_compatible: true,
+          transcode_status: 'success',
+        }),
+      }),
+    );
+    render(<AIDecisionSeatCard seatId="Seat1" row={row()} nowMs={Date.now()} onOpen={vi.fn()} />);
+    expect(await screen.findByRole('button', { name: '최근 5초 보기' })).toBeInTheDocument();
+    expect(screen.queryByText(/브라우저 재생 호환 변환이 필요합니다/)).toBeNull();
+  });
+
   it('bridge fetch 실패 시 "미리보기 오류" 를 안전하게 표시한다', async () => {
     vi.stubEnv('VITE_LOCAL_PREVIEW_BRIDGE_URL', BRIDGE);
     stubFetchOnce(() => Promise.reject(new Error('network down')));

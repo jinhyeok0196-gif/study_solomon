@@ -83,6 +83,73 @@ def test_build_metadata_non_available_has_no_filename():
     print("PASS build_metadata: 비가용 상태엔 clip_filename 없음")
 
 
+def test_build_metadata_includes_codec_fields():
+    # v0.6-pre.1: codec/browser_compatible/transcode_status 저장
+    now = datetime(2026, 7, 1, 9, 0, 0)
+    m = pc.build_metadata("Seat1", pc.STATUS_AVAILABLE, generated_at=now,
+                          clip_filename="latest.mp4",
+                          codec=pc.CODEC_H264, browser_compatible=True,
+                          transcode_status=pc.TRANSCODE_SUCCESS)
+    assert m["codec"] == "h264" and m["browser_compatible"] is True
+    assert m["transcode_status"] == "success"
+    assert "codec_warning" not in m
+    print("PASS metadata codec: h264 필드 저장")
+
+
+def test_finalize_clip_ffmpeg_success():
+    with tempfile.TemporaryDirectory() as d:
+        raw = os.path.join(d, pc.CAPTURE_TMP_FILENAME)
+        clip = os.path.join(d, pc.CLIP_FILENAME)
+        with open(raw, "wb") as f:
+            f.write(b"mp4v-raw")
+
+        def fake_transcoder(ffmpeg, r, out):     # ffmpeg 성공 mock(H.264 파일 생성)
+            with open(out, "wb") as f:
+                f.write(b"h264-out")
+            return True
+
+        info = pc.finalize_clip(raw, clip, ffmpeg="/usr/bin/ffmpeg", transcoder=fake_transcoder)
+        assert info["codec"] == "h264" and info["browser_compatible"] is True
+        assert info["transcode_status"] == "success"
+        assert "codec_warning" not in info
+        assert os.path.exists(clip) and not os.path.exists(raw)   # raw 삭제됨
+    print("PASS finalize(ffmpeg): 변환 성공 → h264 browser_compatible=True")
+
+
+def test_finalize_clip_ffmpeg_missing_fallback():
+    with tempfile.TemporaryDirectory() as d:
+        raw = os.path.join(d, pc.CAPTURE_TMP_FILENAME)
+        clip = os.path.join(d, pc.CLIP_FILENAME)
+        with open(raw, "wb") as f:
+            f.write(b"mp4v-raw")
+        info = pc.finalize_clip(raw, clip, ffmpeg="")   # ffmpeg 없음(빈 문자열=falsy)
+        assert info["codec"] == "mp4v" and info["browser_compatible"] is False
+        assert info["transcode_status"] == "ffmpeg_missing"
+        assert info["codec_warning"] == pc.CODEC_WARNING
+        assert os.path.exists(clip) and not os.path.exists(raw)   # raw → clip 로 대체
+    print("PASS finalize(no ffmpeg): mp4v fallback + codec_warning")
+
+
+def test_finalize_clip_transcode_failed_fallback():
+    with tempfile.TemporaryDirectory() as d:
+        raw = os.path.join(d, pc.CAPTURE_TMP_FILENAME)
+        clip = os.path.join(d, pc.CLIP_FILENAME)
+        with open(raw, "wb") as f:
+            f.write(b"mp4v-raw")
+        info = pc.finalize_clip(raw, clip, ffmpeg="/usr/bin/ffmpeg", transcoder=lambda *a: False)
+        assert info["codec"] == "mp4v" and info["browser_compatible"] is False
+        assert info["transcode_status"] == "failed"
+        assert info["codec_warning"] == pc.CODEC_WARNING
+        assert os.path.exists(clip)
+    print("PASS finalize(fail): 변환 실패 → mp4v fallback")
+
+
+def test_find_ffmpeg_returns_str_or_none():
+    r = pc.find_ffmpeg()
+    assert r is None or isinstance(r, str)
+    print("PASS find_ffmpeg: str 또는 None")
+
+
 def test_is_expired():
     past = pc.build_metadata("Seat1", pc.STATUS_AVAILABLE,
                              generated_at=datetime.now() - timedelta(seconds=300),
@@ -162,6 +229,11 @@ def main():
     test_build_metadata_available_and_expiry()
     test_note_is_ascii_and_windows_safe()
     test_written_meta_is_pure_ascii()
+    test_build_metadata_includes_codec_fields()
+    test_finalize_clip_ffmpeg_success()
+    test_finalize_clip_ffmpeg_missing_fallback()
+    test_finalize_clip_transcode_failed_fallback()
+    test_find_ffmpeg_returns_str_or_none()
     test_build_metadata_non_available_has_no_filename()
     test_is_expired()
     test_capture_without_rtsp_is_unavailable_no_mp4()

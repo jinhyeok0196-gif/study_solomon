@@ -6,6 +6,7 @@ import {
   PREVIEW_STATE_LABEL,
   PREVIEW_DISCLAIMERS,
   PREVIEW_DURATION_SECONDS,
+  PREVIEW_CODEC_WARNING,
   type PreviewDisplayState,
 } from '../previewTypes';
 import { getPreviewBridgeBaseUrl, fetchSeatPreview, type BridgePreviewFields } from '../previewBridge';
@@ -87,6 +88,8 @@ export function SeatPreviewButton({ row, nowMs, seatId }: Props) {
   const state = derivePreviewState(effectiveRow, nowMs);
   const label = PREVIEW_STATE_LABEL[state];
   const canPlay = state === 'preview_available' && Boolean(effectiveRow.preview_clip_url);
+  // 브라우저 재생 호환 변환 필요(H.264 아님)일 때만 표시(명시적 false 만).
+  const needsTranscode = effectiveRow.preview_browser_compatible === false;
 
   return (
     <div className="mt-2 border-t border-gray-200/70 pt-2" data-testid="seat-preview">
@@ -108,6 +111,13 @@ export function SeatPreviewButton({ row, nowMs, seatId }: Props) {
           </span>
         )}
       </div>
+
+      {/* 브라우저 재생 호환 경고(mp4v 등, H.264 변환 필요) */}
+      {needsTranscode && (
+        <p className="mt-1 text-center text-[9px] leading-tight text-amber-700">
+          ⚠ {PREVIEW_CODEC_WARNING}
+        </p>
+      )}
 
       {/* 인라인 재생(로컬 전용). preload=none 으로 자동 다운로드 방지. */}
       {canPlay && open && (

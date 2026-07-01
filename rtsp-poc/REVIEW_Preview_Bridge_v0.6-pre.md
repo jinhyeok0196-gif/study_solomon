@@ -220,6 +220,28 @@ AI 판정(증거 후보) ─(관리자 확인)→ 벌점 예정(PENDING)
 - [x] `ai_rule_decisions` update/delete 없음, schema/migration 변경 없음
 - [x] 학생 상태/출결/벌점/알림 자동 변경 없음
 
+---
+
+## 부록 A. v0.6-pre.1 — 브라우저 재생 호환(H.264) 수정
+
+**문제(로컬 실측):** `preview_clip_capture.py`의 OpenCV `VideoWriter(mp4v)` 출력이 Windows 로컬 플레이어에선 재생되지만
+**브라우저 `<video>` 태그에서는 화면이 비어 보임**(mp4v 코덱 비호환).
+
+**수정:**
+- 캡처는 원본 `temp/previews/<Seat>/capture_tmp.mp4`(mp4v)로 기록 후, **ffmpeg가 있으면 H.264로 변환**해 `latest.mp4` 생성:
+  `ffmpeg -y -i <raw> -c:v libx264 -pix_fmt yuv420p -movflags +faststart latest.mp4`
+- ffmpeg 탐색: `shutil.which("ffmpeg")` → `imageio_ffmpeg.get_ffmpeg_exe()` fallback → 둘 다 없으면 **mp4v 그대로 사용**.
+- `latest.json` / bridge `/api` 응답에 필드 추가:
+  - 성공: `codec="h264"`, `browser_compatible=true`, `transcode_status="success"`
+  - fallback: `codec="mp4v"`, `browser_compatible=false`, `transcode_status="ffmpeg_missing"|"failed"`, `codec_warning="mp4v may not play correctly in browser video tag"`
+- 프론트: `browser_compatible=false`일 때 카드에 작게 **"⚠ 브라우저 재생 호환 변환이 필요합니다"** 표시(기존 PHONE/UNKNOWN/ABSENT/object-only 표시 무영향).
+- 출력 파일명(`latest.mp4`)·TTL·path traversal·localhost-only·no-store·directory listing 금지·DB 미저장 원칙 **모두 유지**.
+
+**로컬 재검증:** ffmpeg 설치된 노트북에서 `codec=h264`/`browser_compatible=true` 확인 → 브라우저 재생 정상 여부 재확인 필요.
+(Codespaces에는 ffmpeg 미설치 → `find_ffmpeg()=None` 확인, fallback 경로로 동작.)
+
+---
+
 > **AI 판정은 보조 지표입니다. 학생 상태, 출결, 벌점은 자동 변경되지 않습니다.**
 >
 > **STABLE 도 확정이 아닙니다.**
