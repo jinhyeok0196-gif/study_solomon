@@ -139,6 +139,23 @@ class RuleEngine:
                                reasons=["human/objects 사실이 모두 비어 판정 불가"],
                                evidence=evidence, rule_hits=[], quality=quality)
 
+        # 3.5) object-only guard (v0.4): 사람 신호는 없는데 유의미한 객체(phone/book/laptop/tablet)만
+        #      검출되면 ABSENT 로 확정하지 않는다. person 이 프레임에서 일시적으로 미검출된 경우
+        #      책상 위 물건만 보고 "자리비움"으로 오판하는 위험 케이스를 차단한다.
+        #      → ABSENT 룰보다 먼저 적용되며 UNKNOWN(보류)으로 둔다.
+        person_present = (_b(objects, "person_detected") or _b(human, "face_detected")
+                          or _b(human, "pose_detected") or _b(human, "hands_detected"))
+        meaningful_object = any(_b(objects, f"{k}_detected")
+                                for k in ("phone", "book", "laptop", "tablet"))
+        if not person_present and meaningful_object:
+            labels = [k for k in ("phone", "book", "laptop", "tablet")
+                      if _b(objects, f"{k}_detected")]
+            rule_hits = [{"rule": "object_only_guard", "fired": True, "confidence": 0.0}]
+            return self._build(sf, decided_at, A.UNKNOWN, 0.0, A.STATUS_SUCCESS,
+                               reasons=[f"객체 감지됨({', '.join(labels)}) · 사람 미검출 "
+                                        f"→ 자리비움 확정 보류(object-only, 사람 일시 미검출 가능)"],
+                               evidence=evidence, rule_hits=rule_hits, quality=quality)
+
         # 4) 각 규칙 평가(enabled 만)
         candidates: List[Tuple[int, str, float, List[str]]] = []  # (priority, activity, conf, reasons)
         rule_hits: List[Dict[str, Any]] = []
@@ -262,30 +279,46 @@ class RuleEngine:
         return (conf >= self.thresholds["sleeping_confidence"], conf, reasons)
 
     def _rule_studying(self, human, objects) -> Tuple[bool, float, List[str]]:
-        """공부: 학습 도구 + 사람/손/자세 + 휴대폰 약함. 책 보였다고 무조건 확정 안 함."""
+        """공부: 학습 도구 + **사람 존재** + **휴대폰 없음**. 오탐 방지를 우선(보수적).
+
+        v0.4 정책(확정 조건):
+          - person 존재(person_detected 또는 자세/얼굴)          → 없으면 STUDYING 아님
+          - phone 미검출(phone_detected=False)                   → 있으면 STUDYING 확정 보류(PHONE 우선)
+          - book / laptop / tablet 중 하나 이상 검출
+        (person 있고 unknown_object 만 있는 경우는 study 도구가 없어 여기서 발동하지 않음 → UNKNOWN)
+        """
         study = _b(objects, "book_detected") or _b(objects, "laptop_detected") \
             or _b(objects, "tablet_detected")
         if not study:
             return (False, 0.0, [])
+        person = _b(objects, "person_detected") or _b(human, "pose_detected") \
+            or _b(human, "face_detected")
+        if not person:
+            return (False, 0.0, [])            # 사람 없으면 STUDYING 아님(object-only)
+        if _b(objects, "phone_detected"):
+            return (False, 0.0, [])            # 휴대폰 있으면 STUDYING 확정 보류(오탐 방지)
+
         hands = _b(human, "hands_detected")
         pose = _b(human, "pose_detected")
-        person = _b(objects, "person_detected")
-        phone = _b(objects, "phone_detected")
-
         conf = 0.45
-        reasons = ["책 또는 학습 도구가 검출됨"]
+        reasons = ["책 또는 학습 도구가 검출됨", "사람이 함께 검출됨", "휴대폰 객체 없음"]
         if hands:
             conf += 0.20; reasons.append("손 특징이 함께 검출됨")
-        if pose or person:
-            conf += 0.20; reasons.append("사람/자세 특징이 함께 검출됨")
-        if not phone:
-            conf += 0.15; reasons.append("휴대폰 객체 신호가 약함")
+        if pose:
+            conf += 0.20; reasons.append("자세 특징이 함께 검출됨")
+        else:
+            conf += 0.20                       # 사람 존재(위 person 게이트 통과) 보정
         conf = round(min(1.0, conf), 4)
         return (conf >= self.thresholds["studying_confidence"], conf, reasons)
 
     # ----------------------------------------------------------- helpers
     @staticmethod
     def _build_evidence(quality, human, objects) -> Dict[str, Any]:
+        # 검출된 표준 라벨(정규화) — object_counts 에서 count>0 만
+        object_counts = objects.get("object_counts", {}) or {}
+        detected_labels = sorted(
+            k for k, v in object_counts.items()
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0)
         return {
             "overall_quality": quality.get("overall_quality"),
             "vision_quality": quality.get("vision_quality"),
@@ -303,6 +336,15 @@ class RuleEngine:
             "face_visible_ratio": human.get("face_visible_ratio"),
             "hands_visible_ratio": human.get("hands_visible_ratio"),
             "pose_visible_ratio": human.get("pose_visible_ratio"),
+            # v0.4: object 세부(저장 payload/대시보드가 안정적으로 참조) — 수치/텍스트만
+            "detected_labels": detected_labels,
+            "normalized_labels": detected_labels,
+            "person_count": objects.get("max_person_count"),
+            "phone_count": objects.get("phone_detection_count"),
+            "book_count": objects.get("book_detection_count"),
+            "laptop_count": objects.get("laptop_detection_count"),
+            "tablet_count": objects.get("tablet_detection_count"),
+            "top_object_confidence": objects.get("max_detection_confidence"),
         }
 
     def _build(self, sf, decided_at, activity, confidence, status, reasons,

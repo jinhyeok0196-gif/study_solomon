@@ -143,3 +143,23 @@ export function unknownSignalHint(row: AIDecisionRow): string | null {
   const cameraOk = typeof visionQ === 'number' && visionQ > 0;
   return cameraOk ? '카메라 연결 성공 · 판정 신호 부족' : '판정 신호 부족';
 }
+
+/** object-only 케이스 안내(자리비움으로 오해 방지). */
+export const OBJECT_ONLY_HINT = '객체 감지됨 · 사람 미검출 · 자리비움 확정 아님';
+
+/**
+ * object-only 보류 케이스: activity=UNKNOWN 인데 사람은 미검출이고
+ * 유의미한 객체(phone/book/laptop/tablet)는 검출된 상태.
+ * v0.4 RuleEngine object-only guard 가 ABSENT 확정을 막은 경우로,
+ * "자리비움"으로 오해하지 않도록 대시보드에서 구분 표시한다.
+ * (읽기 전용 보조 표시 — 학생 상태/출결/벌점은 자동 변경되지 않는다.)
+ */
+export function isObjectOnlyUnknown(row: AIDecisionRow): boolean {
+  if (row.activity !== 'UNKNOWN') return false;
+  const e = row.evidence ?? {};
+  const personAbsent = !e['person_detected'];
+  const objectPresent = Boolean(
+    e['phone_detected'] || e['book_detected'] || e['laptop_detected'] || e['tablet_detected'],
+  );
+  return personAbsent && objectPresent;
+}

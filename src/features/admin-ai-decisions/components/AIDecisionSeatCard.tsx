@@ -8,6 +8,8 @@ import {
   minutesSince,
   isStale,
   unknownSignalHint,
+  isObjectOnlyUnknown,
+  OBJECT_ONLY_HINT,
   LOW_CONFIDENCE_THRESHOLD,
   type AIDecisionRow,
 } from '../types';
@@ -46,6 +48,7 @@ function AIDecisionSeatCardInner({ seatId, row, nowMs, onOpen, candidate, onOpen
   const stale = isStale(row.decided_at, nowMs);
   const lowConf = (row.confidence ?? 0) < LOW_CONFIDENCE_THRESHOLD;
   const topReason = row.reasons?.[0];
+  const objectOnly = isObjectOnlyUnknown(row);
   const unknownHint = unknownSignalHint(row);
 
   return (
@@ -70,13 +73,22 @@ function AIDecisionSeatCardInner({ seatId, row, nowMs, onOpen, candidate, onOpen
         <span className={cn('rounded px-1 py-0.5 font-medium', sev.badgeClass)}>{sev.label}</span>
       </div>
 
-      {/* UNKNOWN 원인 힌트: 카메라 연결 성공 / 판정 신호 부족 구분 */}
-      {unknownHint && (
+      {/* object-only 보류: 객체는 있으나 사람 미검출 → 자리비움 오해 방지(우선 표시) */}
+      {objectOnly ? (
         <div className="mt-1 flex justify-center">
-          <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-700">
-            {unknownHint}
+          <span className="rounded bg-amber-50 px-1.5 py-0.5 text-center text-[10px] text-amber-700">
+            {OBJECT_ONLY_HINT}
           </span>
         </div>
+      ) : (
+        /* UNKNOWN 원인 힌트: 카메라 연결 성공 / 판정 신호 부족 구분 */
+        unknownHint && (
+          <div className="mt-1 flex justify-center">
+            <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-700">
+              {unknownHint}
+            </span>
+          </div>
+        )
       )}
 
       {/* 경고 플래그 */}

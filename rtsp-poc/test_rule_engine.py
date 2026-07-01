@@ -88,15 +88,44 @@ def low_quality_facts():
                  "overall_quality": 0.0667, "usable_for_rule_engine": False})
 
 
-def conflict_facts():
-    # phone 과 studying 이 둘 다 강하게 발동(confidence 가 매우 가까움) → 충돌
+def phone_and_book_facts():
+    # 사람 + 휴대폰 + 책 동시 검출. v0.4 정책: 휴대폰이 있으면 STUDYING 미발동 → PHONE.
     return _facts(
         human={"face_detected": True, "face_visible_ratio": 0.6, "hands_detected": True,
                "hands_visible_ratio": 0.9, "pose_detected": True, "pose_visible_ratio": 0.8},
-        objects={"phone_detected": True, "book_detected": True, "laptop_detected": False,
-                 "tablet_detected": False, "person_detected": True, "max_person_count": 1},
+        objects={"phone_detected": True, "phone_detection_count": 5, "book_detected": True,
+                 "book_detection_count": 2, "laptop_detected": False,
+                 "tablet_detected": False, "person_detected": True, "max_person_count": 1,
+                 "object_counts": {"person": 1, "phone": 5, "book": 2},
+                 "max_detection_confidence": 0.9},
         quality={"vision_quality": 1.0, "human_quality": 0.8, "object_quality": 0.8,
                  "overall_quality": 0.8667, "usable_for_rule_engine": True})
+
+
+def object_only_phone_facts():
+    # 위험 케이스(v0.3-real): 사람 미검출인데 휴대폰만 검출 → ABSENT 확정 금지.
+    return _facts(
+        human={"face_detected": False, "hands_detected": False, "pose_detected": False},
+        objects={"phone_detected": True, "phone_detection_count": 10, "book_detected": False,
+                 "laptop_detected": False, "tablet_detected": False,
+                 "person_detected": False, "max_person_count": 0,
+                 "object_counts": {"phone": 10}, "max_detection_confidence": 0.8},
+        quality={"vision_quality": 1.0, "human_quality": 0.0, "object_quality": 0.6,
+                 "overall_quality": 0.5333, "usable_for_rule_engine": True},
+        vision={"valid_frames": 5})
+
+
+def object_only_laptop_facts():
+    # 위험 케이스: 사람 미검출인데 노트북만 검출 → ABSENT 확정 금지.
+    return _facts(
+        human={"face_detected": False, "hands_detected": False, "pose_detected": False},
+        objects={"phone_detected": False, "book_detected": False, "laptop_detected": True,
+                 "laptop_detection_count": 10, "tablet_detected": False,
+                 "person_detected": False, "max_person_count": 0,
+                 "object_counts": {"laptop": 10}, "max_detection_confidence": 0.7},
+        quality={"vision_quality": 1.0, "human_quality": 0.0, "object_quality": 0.6,
+                 "overall_quality": 0.5333, "usable_for_rule_engine": True},
+        vision={"valid_frames": 5})
 
 
 def make_engine(config=None):
@@ -159,12 +188,42 @@ def test_none_skipped():
     print("PASS none: seat_facts None → SKIPPED")
 
 
-def test_conflict_unknown():
-    d = make_engine().decide(conflict_facts())
-    assert d.activity == A.UNKNOWN, d.activity
+def test_phone_present_suppresses_studying():
+    # v0.4: 사람+휴대폰+책 → 휴대폰이 있으면 STUDYING 확정 보류 → PHONE(안전 우선)
+    d = make_engine().decide(phone_and_book_facts())
+    assert d.activity == A.PHONE, d.activity
     assert d.status == A.STATUS_SUCCESS
-    assert any("충돌" in r for r in d.reasons)
-    print("PASS conflict: phone vs studying 충돌 → UNKNOWN")
+    assert not any(h["rule"] == "studying_rule" and h["fired"] for h in d.rule_hits)
+    print("PASS phone_suppress_studying: 사람+휴대폰+책 → PHONE(STUDYING 미발동)")
+
+
+def test_object_only_guard_phone_not_absent():
+    # v0.4 핵심: 사람 미검출 + 휴대폰 검출 → ABSENT 금지, UNKNOWN 보류(object-only)
+    d = make_engine().decide(object_only_phone_facts())
+    assert d.activity == A.UNKNOWN, d.activity
+    assert d.activity != A.ABSENT
+    assert d.status == A.STATUS_SUCCESS
+    assert any("object-only" in r or "사람 미검출" in r for r in d.reasons)
+    assert any(h["rule"] == "object_only_guard" and h["fired"] for h in d.rule_hits)
+    # absent 룰이 발동해서는 안 된다
+    assert not any(h["rule"] == "absent_rule" and h.get("fired") for h in d.rule_hits)
+    print("PASS object_only(phone): 사람없음+휴대폰 → UNKNOWN(자리비움 확정 보류)")
+
+
+def test_object_only_guard_laptop_not_absent():
+    d = make_engine().decide(object_only_laptop_facts())
+    assert d.activity == A.UNKNOWN, d.activity
+    assert d.activity != A.ABSENT
+    assert any(h["rule"] == "object_only_guard" and h["fired"] for h in d.rule_hits)
+    print("PASS object_only(laptop): 사람없음+노트북 → UNKNOWN(자리비움 확정 보류)")
+
+
+def test_absent_when_truly_empty():
+    # 사람도 없고 유의미한 객체도 없을 때만 ABSENT (object-only guard 미발동)
+    d = make_engine().decide(absent_facts())
+    assert d.activity == A.ABSENT
+    assert not any(h["rule"] == "object_only_guard" and h.get("fired") for h in d.rule_hits)
+    print("PASS absent_empty: 사람X + 객체X → ABSENT 유지")
 
 
 def test_decision_fields_and_records():
@@ -221,13 +280,17 @@ def main():
     test_sleeping()
     test_low_quality_unknown()
     test_none_skipped()
-    test_conflict_unknown()
+    test_phone_present_suppresses_studying()
+    test_object_only_guard_phone_not_absent()
+    test_object_only_guard_laptop_not_absent()
+    test_absent_when_truly_empty()
     test_decision_fields_and_records()
     test_no_powernap_activity()
     test_config_thresholds_used()
     test_fusion_engine_intact()
     print("\nALL PASS: studying / phone / absent / sleeping / low_quality / none / "
-          "conflict / fields / no_powernap / config / intact")
+          "phone_suppress_studying / object_only(phone,laptop) / absent_empty / "
+          "fields / no_powernap / config / intact")
 
 
 if __name__ == "__main__":

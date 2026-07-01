@@ -50,12 +50,32 @@ describe('AIDecisionSeatCard', () => {
           activity: 'UNKNOWN', confidence: 0, status: 'LOW_CONFIDENCE',
           reasons: ['human/objects 사실이 모두 비어 판정 불가'],
           quality: { overall_quality: 1.0, vision_quality: 1.0, usable_for_rule_engine: true },
+          evidence: { person_detected: false, phone_detected: false },
         })}
         nowMs={Date.now()}
         onOpen={vi.fn()}
       />,
     );
     expect(screen.getByText('카메라 연결 성공 · 판정 신호 부족')).toBeInTheDocument();
+  });
+
+  it('object-only(사람 미검출 + 객체 검출) UNKNOWN 은 "자리비움 확정 아님" 을 표시한다', () => {
+    render(
+      <AIDecisionSeatCard
+        seatId="Seat1"
+        row={row({
+          activity: 'UNKNOWN', confidence: 0, status: 'SUCCESS',
+          reasons: ['객체 감지됨(phone) · 사람 미검출 → 자리비움 확정 보류(object-only)'],
+          quality: { overall_quality: 0.6, vision_quality: 1.0, usable_for_rule_engine: true },
+          evidence: { person_detected: false, phone_detected: true, phone_count: 10 },
+        })}
+        nowMs={Date.now()}
+        onOpen={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('객체 감지됨 · 사람 미검출 · 자리비움 확정 아님')).toBeInTheDocument();
+    // object-only 우선 표시이므로 일반 신호부족 문구는 나오지 않는다
+    expect(screen.queryByText('카메라 연결 성공 · 판정 신호 부족')).toBeNull();
   });
 });
 

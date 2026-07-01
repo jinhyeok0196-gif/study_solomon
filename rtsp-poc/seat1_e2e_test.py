@@ -221,6 +221,7 @@ UNKNOWN_REASON_CODES = (
     "LOW_QUALITY",          # 품질 게이트 미달
     "NO_DETECTION_ENGINE",  # 사람/객체 탐지 엔진(MediaPipe/YOLO) 미실행 → human/object fact 없음
     "NO_DETECTION_SIGNAL",  # 탐지 엔진은 실행됐으나 사실이 비어있음
+    "OBJECT_WITHOUT_PERSON",  # 유의미한 객체는 있으나 사람 미검출 → 자리비움 확정 보류(object-only)
     "CONFLICT",             # 상위 후보 신호 충돌
     "NO_ACTIVITY_SIGNAL",   # 사실은 있으나 뚜렷한 활동 신호 없음
 )
@@ -371,6 +372,13 @@ def build_debug_metrics(here: str, seat: str, engines: List[str], fake: bool,
             code = "NO_DETECTION_SIGNAL"
             no_fact_reason = ("사람/객체 탐지 엔진은 실행됐으나 human/object fact 가 비어 판정 불가 "
                               "(모델/ROI/장면 확인)")
+    elif person_count == 0 and (phone_count > 0 or book_count > 0
+                                or laptop_count > 0 or tablet_count > 0):
+        # v0.4 object-only: 유의미한 객체는 있으나 사람 미검출 → 자리비움 확정 보류
+        code = "OBJECT_WITHOUT_PERSON"
+        _lbls = ", ".join(detected_labels) or "object"
+        no_fact_reason = (f"유의미한 객체({_lbls})는 감지됐으나 사람(person) 미검출 "
+                          f"→ 자리비움 확정 보류(object-only). person 일시 미검출 가능")
     elif any("충돌" in str(r) for r in reasons):
         code = "CONFLICT"
         no_fact_reason = "상위 후보 신호가 충돌하여 UNKNOWN"
