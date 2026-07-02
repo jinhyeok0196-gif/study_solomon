@@ -6,6 +6,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { MembershipOverviewSection } from '@/features/admin-membership/components/MembershipOverviewSection';
 import { AIDecisionSection } from '@/features/admin-ai-decisions/components/AIDecisionSection';
+import { APP_NAME, APP_TAGLINE, TESTBED_LABEL } from '@/lib/brand';
 
 const DASHBOARD_KEY = ['admin-dashboard-summary'];
 const NOTIFICATIONS_KEY = ['admin-notifications'];
@@ -40,7 +41,13 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h2 className="text-lg font-semibold text-gray-900">관리자 대시보드</h2>
+      <div className="flex flex-col gap-0.5">
+        <div className="flex items-baseline gap-2">
+          <span className="text-lg font-semibold text-gray-900">{APP_NAME}</span>
+          <span className="text-sm text-gray-500">관리자 대시보드</span>
+        </div>
+        <p className="text-xs text-gray-400">{APP_TAGLINE} · {TESTBED_LABEL}</p>
+      </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {SUMMARY_CARDS.map((card) => (

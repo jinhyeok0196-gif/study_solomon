@@ -128,6 +128,18 @@ export const LOW_CONFIDENCE_THRESHOLD = 0.5;
 export const AI_DISCLAIMER =
   'AI 판정은 보조 지표입니다. 학생 상태, 출결, 벌점은 자동 변경되지 않습니다.';
 
+/** 안정화 후보가 STABLE 이어도 자동 출결/벌점/상태 변경이 아님을 명확히 한다. */
+export const STABLE_NON_MUTATION_NOTE =
+  '안정화 후보가 STABLE 이어도 출결·벌점·학생 상태·알림은 자동으로 변경되지 않습니다(관리자 확인 필수).';
+
+/**
+ * 실제 카메라(RTSP) 경로와 내부 데모(--fake) 경로를 혼동하지 않도록 안내한다.
+ * 실제 경로는 활동 분류 모델 배치 전까지 대부분 UNKNOWN 으로 표시되며,
+ * --fake 경로의 판정은 UI·흐름 검증용일 뿐 실제 AI 정확도가 아니다.
+ */
+export const AI_SOURCE_NOTE =
+  '실제 카메라(RTSP) 경로는 활동 분류 모델 배치 전까지 대부분 UNKNOWN 으로 표시됩니다. 내부 데모(--fake) 경로의 판정은 UI·흐름 검증용이며 실제 AI 정확도가 아닙니다.';
+
 // ── 표시용 헬퍼 ──────────────────────────────────────────────────────────
 
 export function confidencePercent(confidence: number | null): number {

@@ -23,3 +23,9 @@ previews/
 *.jpg
 *.jpeg
 *.png
+
+# v0.9 P1 보강 — 루트 산출 preview 파일 실수 커밋 방지.
+# latest.mp4 는 *.mp4 로 이미 걸리지만 명시적으로 다시 차단하고,
+# latest.json 은 확장자 규칙에 안 걸리므로 여기서 명시적으로 차단한다(local temporary preview only).
+latest.mp4
+latest.json

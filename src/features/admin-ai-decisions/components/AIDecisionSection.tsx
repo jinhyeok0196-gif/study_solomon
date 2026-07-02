@@ -10,7 +10,14 @@ import {
   RECENT_DECISIONS_KEY,
   STABILIZED_KEY,
 } from '../hooks';
-import { AI_DISCLAIMER, SEAT_IDS, type AIDecisionRow, type AIDecisionFilters } from '../types';
+import {
+  AI_DISCLAIMER,
+  STABLE_NON_MUTATION_NOTE,
+  AI_SOURCE_NOTE,
+  SEAT_IDS,
+  type AIDecisionRow,
+  type AIDecisionFilters,
+} from '../types';
 import type { StabilizedCandidate } from '../stabilizedTypes';
 import { PREVIEW_REFETCH_INTERVAL_MS } from '../previewTypes';
 import { AIDecisionSeatGrid } from './AIDecisionSeatGrid';
@@ -65,8 +72,10 @@ export function AIDecisionSection() {
       </div>
 
       {/* 안내 배너 */}
-      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-        ⚠️ {AI_DISCLAIMER} <span className="text-amber-600">단발 AI 판정과 "안정화된 추정"은 모두 보조 지표이며, STABLE 도 확정이 아닙니다.</span>
+      <div className="flex flex-col gap-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <p>⚠️ {AI_DISCLAIMER} <span className="text-amber-600">단발 AI 판정과 "안정화된 추정"은 모두 보조 지표이며, STABLE 도 확정이 아닙니다.</span></p>
+        <p className="text-amber-700">{STABLE_NON_MUTATION_NOTE}</p>
+        <p className="text-amber-600">{AI_SOURCE_NOTE}</p>
       </div>
 
       {/* 좌석 카드(단발 AI + 안정화된 추정) */}
