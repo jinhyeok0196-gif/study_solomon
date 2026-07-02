@@ -9,8 +9,9 @@
 > **STABLE 도 확정이 아닙니다.**
 
 - 작성일: 2026-07-02
-- 개정: **v4 — Python·프론트 커밋 완료 반영**
-- 상태: **Python 1차 커밋 `f218c8f` + 프론트 2차 커밋 `0ea218a` 완료(브랜치 `feat/v0.7-seat1-repeat`, origin push 완료) · 테스트 통과(py 34/158, FE 51) · build OK · 현장 데스크탑 2단계 실검증 대기**
+- 개정: **v5 — 현장 데스크탑 STAGE 2 실검증 통과 반영**
+- 상태: **STAGE 2 현장 검증 통과(2026-07-02)** — Seat1 real RTSP 60분 save+preview **32/32 insert · 32/32 preview 성공**, 누적 12→20→52 정합 확인. Python 1차 커밋 `f218c8f` + 프론트 2차 커밋 `0ea218a`(브랜치 `feat/v0.7-seat1-repeat`, origin push 완료) · 테스트 통과(py 34/158, FE 51) · build OK. **CTO 리뷰 파일: `cto_review_v0.7_seat1_field_verification.md`.**
+  - ⚠️ 단, **1분 주기 정확도 완전 검증은 아니다**(§9 known observations — tick 지연 관찰).
 - 대상 좌석: Seat1 (VIGI 서브스트림 `stream2`)
 - RTSP(마스킹): `rtsp://admin:****@192.168.219.50:554/stream2`
 
@@ -25,7 +26,16 @@
 
 ## 0. CTO 조건부 승인 요약
 
-승인된 방향(유지):
+### 0-1. CTO 최종 판정 (2026-07-02)
+
+- **GO** — Seat1 **controlled field testing 지속 승인**. (대시보드 preview 관찰, append-only `ai_rule_decisions` 누적 검증, 계측·운영 하드닝 지속)
+- **NO-GO** — **production-grade unattended multi-seat operation(상용 무인·다좌석 상시 운영)은 아직 미승인.** 출결/벌점/알림/보호자 연락 자동 변경 미승인.
+- 운영 하드닝 전 **tick 지연 단계별 계측(duration logging)이 선행 필요**.
+- **AI 판정 정확도 미검증 · 1분 주기 정확도 미검증**(§9). 이번 검증은 실패가 아니라 **MVP 기술 검증 성공**이나, "상시 운영 제품"이라 부르기엔 tick 지연·장시간·다좌석·자동복구 검증이 부족하다.
+- CTO 복붙용 독립 리뷰: **`cto_review_v0.7_seat1_field_verification.md`**.
+
+### 0-2. 승인된 방향(유지)
+
 - 기존 `seat1_e2e_test.py` 반복 루프 재사용 / `--preview` 플래그로 판정 후 클립 생성
 - 카메라 판정용·클립용 **동시 오픈 금지, 순차 접근**
 - `preview_bridge_server.py` 그대로 재사용
@@ -202,15 +212,17 @@ npm run dev
 **1단계**
 - [x] 현장 데스크탑에서 §2 체크리스트 전부 통과.
 
-**2단계**
-- [ ] `--preview` 매 tick 판정 + `latest.mp4/latest.json` 재생성.
-- [ ] `--save` 동반 시에만 `ai_rule_decisions` insert 누적(미동반 0건).
-- [ ] `--forever` 장시간 실행에서 tick 예외가 루프를 중단시키지 않음.
-- [ ] `--verify-accumulation`에서 PHONE/UNKNOWN/ABSENT 카운트 증가 확인.
-- [ ] 대시보드 클립 만료→재생성 실시간 전이.
-- [ ] append-only 유지 / 바이너리 DB 미저장 / 자동 상태변경 없음.
-- [ ] 디스크 무한 증가 없음(latest만 유지 + 만료 정리).
-- [ ] Build/Type/Lint/pytest 통과 / 커밋 전 민감정보 미포함 재확인.
+**2단계 — 현장 데스크탑 실검증 통과(2026-07-02)**
+- [x] `--preview` 매 tick 판정 + `latest.mp4/latest.json` 재생성. — 60분 테스트 `previews_generated=32`, `preview_errors=0`, 매 tick `status=available, codec=h264, browser_compatible=True, transcode=success`.
+- [x] `--save` 동반 시에만 `ai_rule_decisions` insert 누적(미동반 0건). — no-save 10분 `saved=0`(insert 없음), save 10분 `saved=8`(HTTP 201×8), save 60분 `saved=32`(HTTP 201×32).
+- [x] `--forever`/장시간 실행에서 tick 예외가 루프를 중단시키지 않음. — 60분 `tick_errors=0, interrupted=False`, 중간 지연 구간에도 루프 유지·매 tick RTSP open/close(연결/해제) 반복 성공(로그상 reconnects=0)(§9).
+- [x] `--verify-accumulation`에서 PHONE/UNKNOWN/ABSENT 카운트 증가 확인. — total_rows 12→20→52 단조 증가, read-only(HTTP 200), UNKNOWN 누적 증가.
+- [x] 대시보드 클립 만료→재생성 실시간 전이. — 브라우저 관리자 화면에서 Seat1 최근 5초 미리보기 활성화·H.264 재생 성공 확인.
+- [x] append-only 유지 / 바이너리 DB 미저장 / 자동 상태변경 없음. — POST insert만(update/delete 없음), 클립은 로컬 `temp/previews` 파일, DB엔 판정 메타만.
+- [x] 디스크 무한 증가 없음(latest만 유지 + 만료 정리). — 좌석당 `latest.mp4/latest.json` 덮어쓰기 유지, `cleanup_removed=0`(TTL 내 재생성으로 정리 대상 없음).
+- [x] Build/Type/Lint/pytest 통과 / 커밋 전 민감정보 미포함 재확인. — py 34/158, FE 51, build OK, grep clean.
+
+> ⚠️ **비검증 항목:** 위 통과는 **1분 주기 정확도 완전 검증이 아니다** — 그리고 **AI 판정 정확도 검증도 아니다**(activity가 UNKNOWN 위주인 것은 이번 검증 목적상 실패가 아님; 모델 미배치 상태). 60분 테스트에서 tick은 60회가 아니라 **32회** 돌았고 중간 지연 구간이 있었다(§9). "루프 생존성 + RTSP 접근(open/close) + DB append insert + 로컬 preview 생성 + 브라우저 재생 구조 유지"를 검증한 것이지, 스케줄링 정확도나 AI 판정 정확도를 검증한 것은 아니다.
 
 ---
 
@@ -251,3 +263,45 @@ npm run dev
 - **사용자 동의 기반 공유** / 보호자·지인·관리자·외부 제출용 리포트 단계 구분.
 - 위변조 방지 코드 또는 검증 링크는 후속 설계.
 - ⚠️ v0.7 미구현(장기 비전 기록).
+
+---
+
+## 9. Known Observations — tick 지연 (현장 검증 기록)
+
+STAGE 2 60분 save+preview 테스트(`--duration 60 --interval 60`).
+
+**Observed:**
+- 60분 테스트에서 `total_runs = 32` (정확히 60회 tick이 돈 것이 아니다).
+- 지연 구간 예: `17:12:55 → 17:18:51`, `17:27:52 → 17:39:57`.
+
+**Impact:**
+- strict one-minute cadence는 검증되지 않음(not validated).
+- 그러나 루프는 죽지 않음(loop did not crash).
+- `saved 32/32` 성공, `previews 32/32` 성공.
+- `tick_errors=0`, `preview_errors=0`, `interrupted=False`.
+
+**Root cause:**
+- **이번 테스트에서 확정하지 않았다(not determined in this test).**
+- 후보 원인: 프로세스 스케줄링, sleep/drift 계산 방식, blocking I/O, preview transcode, RTSP/OpenCV open/close 지연, Windows 전원/백그라운드 스케줄링, 원격 데스크톱 환경 영향 등. **RTSP 순단으로 단정하지 않는다**(로그상 reconnects=0 흐름이 반복됨).
+
+**Required next step — tick 단계별 duration logging 추가:**
+`camera_start_wait`, `warmup_duration`, `frame_collect_duration`, `inference_duration`, `supabase_save_duration`, `camera_stop_duration`, `preview_capture_duration`, `preview_transcode_duration`, `total_tick_duration`, `sleep_until_next_tick_duration`, `schedule_drift_seconds`.
+
+> **정확한 표현(문서·리뷰에 반드시 이 표현 사용):**
+> "v0.7 STAGE 2는 **1분 주기 정확도 완전 검증이 아니라**, 장시간 실행 중 지연이 있어도 **루프가 죽지 않고 RTSP 접근·DB 저장·preview 생성·브라우저 재생 구조가 유지됨**을 검증했다. 지연 원인은 이번 테스트에서 확정하지 않았다."
+
+---
+
+## 10. 운영 전환 전 보완 과제 (Pre-operation TODO)
+
+STAGE 2 통과 = "구조가 살아있다" 확인. 아래는 **실운영 상시 가동 전** 정리/결정이 필요한 항목이다.
+
+1. **tick 지연 원인 분석** — §9의 단계별 duration logging 추가(run_once/캡처/트랜스코딩/카메라 open·close/sleep drift 각 단계 소요시간 계측). 원인은 아직 미확정이므로 계측 후 판단.
+2. **1분 주기 정확도 개선 여부 결정** — 고정 sleep(interval) → "다음 정각 정렬(drift 보정)" 스케줄로 바꿀지, 아니면 "지연 허용 + 저장/preview 무결성 우선" 현행 유지로 확정할지 CTO 결정.
+3. **save path 의존성 requirements 반영 확인** — `supabase` 패키지를 `requirements.txt`에 반영 완료(v0.7). 현장 재배포 시 `pip install -r requirements.txt`로 재현되는지 확인.
+4. **YOLO/MediaPipe 모델 배치 계획** — 현재 현장에 `models/*.pt`/MediaPipe 모델 없음(preflight WARN, preview 검증엔 non-blocking). 실제 활동판정 정확도용 모델 배치·버전관리 계획(모델 파일은 커밋 금지).
+5. **관리자 대시보드 read migration 적용 여부 확인** — `20260709000000_ai_rule_decisions_admin_read.sql`(read-only RLS + realtime) 원격 반영 상태 재확인.
+6. **preview bridge 운영 방식 정리** — `preview_bridge_server.py` 상시 기동(작업 스케줄러/서비스), 반복 루프와 함께 자동 재기동 절차 문서화.
+7. **local preview 보안/접근 범위 정리** — bridge는 `127.0.0.1:8765` 로컬 전용, 외부 노출 금지 원칙 명문화. 원격제어(Chrome Remote Desktop) 경유 접근 범위 정리.
+8. **60분 이상 장시간/반나절 테스트 계획** — `--forever` 또는 `--duration 480`(8시간) 이상 상시 실행에서 디스크/메모리/로그/RTSP open·close 누적 거동 관찰. 로그 회전 후속 과제 확정. Windows 전원/절전/화면꺼짐/원격 데스크톱 영향 점검 포함.
+9. **Seat2~Seat8 확장 전 카메라별 RTSP/ROI 검증 계획** — 좌석별 RTSP URL·서브스트림·ROI·enabled 검증, 동시 다좌석 순차 접근 부하 검토.

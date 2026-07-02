@@ -2,3 +2,8 @@ opencv-python>=4.8.0
 python-dotenv>=1.0.0
 numpy>=1.24.0
 PyYAML>=6.0
+
+# --save / --verify-accumulation (Supabase ai_rule_decisions 저장·조회) 경로에 필요.
+# 판정/preview 전용(미저장) 실행에는 불필요하지만, 현장 저장·누적검증에는 필수.
+# (v0.7 현장 검증 중 미설치로 verify-accumulation 최초 실행 실패 → 설치 후 정상.)
+supabase>=2.0.0
