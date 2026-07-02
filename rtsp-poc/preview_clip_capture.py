@@ -36,6 +36,7 @@ import logging
 import os
 import re
 import sys
+import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Tuple
 
@@ -106,11 +107,13 @@ def build_metadata(seat: str, status: str, *, generated_at: datetime,
                    codec: Optional[str] = None,
                    browser_compatible: Optional[bool] = None,
                    transcode_status: Optional[str] = None,
-                   codec_warning: Optional[str] = None) -> Dict[str, Any]:
+                   codec_warning: Optional[str] = None,
+                   transcode_duration_seconds: Optional[float] = None) -> Dict[str, Any]:
     """프론트 preview 필드의 원천이 되는 사이드카 메타데이터(영상 바이너리 아님).
 
     ⚠️ 실제 파일 경로/URL 은 넣지 않는다(로컬 서빙 레이어가 결정). 파일명만 남긴다.
     codec/browser_compatible/transcode_status 는 브라우저 재생 호환 정보(v0.6-pre.1).
+    transcode_duration_seconds 는 v0.8 계측용 **선택** 필드(없으면 메타에 미포함 → 기존 JSON 구조 유지).
     """
     expires_at = generated_at + timedelta(seconds=max(0.0, float(ttl_seconds)))
     meta: Dict[str, Any] = {
@@ -130,6 +133,9 @@ def build_metadata(seat: str, status: str, *, generated_at: datetime,
     }
     if codec_warning:
         meta["codec_warning"] = codec_warning
+    # v0.8: 선택적 계측 필드(additive). None 이면 기존 JSON 구조 그대로 유지.
+    if transcode_duration_seconds is not None:
+        meta["transcode_duration_seconds"] = round(float(transcode_duration_seconds), 3)
     return meta
 
 
@@ -309,10 +315,15 @@ class PreviewClipCapturer:
             return meta
 
         # 브라우저 재생 호환: 가능하면 H.264 로 변환, 아니면 mp4v fallback
+        # v0.8 계측: finalize_clip(트랜스코딩+파일 확정) 소요시간을 측정한다.
+        # ⚠️ 한계: ffmpeg 트랜스코딩 외 os.replace 등 파일 확정 시간도 포함(대부분 무시가능 수준).
+        _transcode_t0 = time.perf_counter()
         codec_info = finalize_clip(raw_path, clip_path)
+        _transcode_dur = time.perf_counter() - _transcode_t0
         meta = build_metadata(self.seat, STATUS_AVAILABLE, generated_at=datetime.now(),
                               duration_seconds=self.duration_seconds, ttl_seconds=self.ttl_seconds,
                               frame_count=frame_count, fps=fps, clip_filename=CLIP_FILENAME,
+                              transcode_duration_seconds=round(_transcode_dur, 3),
                               **codec_info)
         write_meta(meta_path, meta)
         log.info("[preview %s] status=available frames=%d fps=%.1f codec=%s browser_compatible=%s "

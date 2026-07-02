@@ -518,6 +518,174 @@ def test_no_side_effects_in_source_still_clean():
     print("PASS no_side_effects_v07: v0.7 코드에도 update/delete/영상저장 없음")
 
 
+# ==========================================================================
+# v0.8 — tick 단계별 duration 계측(perf logging). 동작 구조 변경 없음(관찰만).
+# ==========================================================================
+class _SlowRepo(FakeAIDecisionRepository):
+    """save_decision 이 약간 걸리게 해 supabase_save_duration 계측을 검증(가짜 DB)."""
+
+    def save_decision(self, decision):
+        import time as _t
+        _t.sleep(0.02)
+        return super().save_decision(decision)
+
+
+class _TranscodeCapturer:
+    """preview meta 의 transcode_duration_seconds 가 perf sample 로 전파되는지 검증."""
+
+    def __init__(self, capture_sleep=0.0, transcode=0.0):
+        self.capture_sleep = capture_sleep
+        self.transcode = transcode
+
+    def capture(self):
+        import time as _t
+        if self.capture_sleep:
+            _t.sleep(self.capture_sleep)
+        return {"status": "available", "transcode_duration_seconds": self.transcode}
+
+    def cleanup_expired(self):
+        return 0
+
+
+def test_perf_sample_per_tick_and_summary_present():
+    runner = e2e.Seat1E2ERunner(seat="Seat1", fake=True)
+    runner.run_once = lambda: _stub_run_once()
+    summary = runner.run_duration(0.0, 30, forever=True, max_ticks=3, sleep_fn=_NOOP_SLEEP)
+    assert len(summary["perf_samples"]) == 3               # tick 마다 perf sample
+    assert summary["perf_summary"]["total_perf_samples"] == 3
+    for i, s in enumerate(summary["perf_samples"], 1):
+        assert s["tick_index"] == i and s["seat_id"] == "Seat1"
+    print("PASS perf_sample: tick 마다 perf sample 생성")
+
+
+def test_perf_summary_keys_in_duration_summary():
+    runner = e2e.Seat1E2ERunner(seat="Seat1", fake=True)
+    runner.run_once = lambda: _stub_run_once()
+    summary = runner.run_duration(0.0, 30, forever=True, max_ticks=1, sleep_fn=_NOOP_SLEEP)
+    assert "perf_summary" in summary
+    ps = summary["perf_summary"]
+    for k in ("avg_total_tick_duration", "max_total_tick_duration",
+              "avg_schedule_drift_seconds", "max_schedule_drift_seconds",
+              "slowest_tick_index", "slowest_tick_breakdown",
+              "total_perf_samples", "perf_logging_enabled"):
+        assert k in ps, k
+    print("PASS perf_summary_keys: 종료 summary 에 perf_summary 필드 포함")
+
+
+def test_save_duration_only_when_save():
+    r_off = e2e.Seat1E2ERunner(seat="Seat1", engines=["opencv"], fake=True, save=False,
+                               repository=FakeAIDecisionRepository())
+    assert r_off.run_once()["perf"]["supabase_save_duration"] == 0.0     # 저장 안 함 → 0
+    r_on = e2e.Seat1E2ERunner(seat="Seat1", engines=["opencv"], fake=True, save=True,
+                              repository=_SlowRepo())
+    assert r_on.run_once()["perf"]["supabase_save_duration"] > 0.0        # 저장 경로만 계측
+    print("PASS perf_save_duration: --save 일 때만 save 소요시간 기록")
+
+
+def test_preview_duration_only_when_preview():
+    r_off = e2e.Seat1E2ERunner(seat="Seat1", fake=True, preview=False)
+    r_off.run_once = lambda: _stub_run_once()
+    s_off = r_off.run_duration(0.0, 30, forever=True, max_ticks=1, sleep_fn=_NOOP_SLEEP)
+    assert s_off["perf_samples"][0]["preview_capture_duration"] == 0.0    # preview 없음 → 0
+    assert s_off["perf_samples"][0]["preview_transcode_duration"] == 0.0
+    cap = _TranscodeCapturer(capture_sleep=0.02, transcode=1.234)
+    r_on = e2e.Seat1E2ERunner(seat="Seat1", fake=True, preview=True, preview_capturer=cap)
+    r_on.run_once = lambda: _stub_run_once()
+    sample = r_on.run_duration(0.0, 30, forever=True, max_ticks=1,
+                               sleep_fn=_NOOP_SLEEP)["perf_samples"][0]
+    assert sample["preview_capture_duration"] > 0.0
+    assert sample["preview_transcode_duration"] == 1.234                  # 메타에서 전파
+    print("PASS perf_preview_duration: --preview 일 때만 capture/transcode 소요시간 기록")
+
+
+def test_perf_summary_generated_even_on_preview_failure():
+    cap = _FakeCapturer(statuses=["error", "unavailable", "error"])
+    runner = e2e.Seat1E2ERunner(seat="Seat1", fake=True, preview=True, preview_capturer=cap)
+    runner.run_once = lambda: _stub_run_once()
+    summary = runner.run_duration(0.0, 30, forever=True, max_ticks=3, sleep_fn=_NOOP_SLEEP)
+    assert summary["perf_summary"]["total_perf_samples"] == 3             # 실패에도 요약 생성
+    assert summary["preview_errors"] == 3
+    assert all(s["preview_error"] is True for s in summary["perf_samples"])
+    print("PASS perf_preview_fail: preview 실패에도 perf_summary 생성")
+
+
+def test_perf_sample_kept_on_tick_exception():
+    runner = e2e.Seat1E2ERunner(seat="Seat1", fake=True)
+    calls = {"n": 0}
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("boom")
+        return _stub_run_once()
+
+    runner.run_once = flaky
+    summary = runner.run_duration(0.0, 30, forever=True, max_ticks=3, sleep_fn=_NOOP_SLEEP)
+    assert summary["perf_summary"]["total_perf_samples"] == 3             # 예외 tick 도 sample 남김
+    failed = [s for s in summary["perf_samples"] if s["tick_error"]]
+    assert len(failed) == 1 and failed[0]["tick_index"] == 2
+    print("PASS perf_tick_exc: tick 예외에도 perf sample 남음(tick_error=True)")
+
+
+def test_perf_sample_values_are_scalar_no_binary():
+    runner = e2e.Seat1E2ERunner(seat="Seat1", fake=True)
+    runner.run_once = lambda: _stub_run_once()
+    summary = runner.run_duration(0.0, 30, forever=True, max_ticks=2, sleep_fn=_NOOP_SLEEP)
+    for s in summary["perf_samples"]:
+        for k, v in s.items():
+            assert isinstance(v, (int, float, str, bool, type(None))), (k, type(v))
+    print("PASS perf_scalar: perf sample 은 수치/문자/불리언만(영상/바이너리 없음)")
+
+
+def test_perf_logging_enabled_reflects_flag():
+    r = e2e.Seat1E2ERunner(seat="Seat1", fake=True, perf_log=False)
+    r.run_once = lambda: _stub_run_once()
+    s = r.run_duration(0.0, 30, forever=True, max_ticks=1, sleep_fn=_NOOP_SLEEP)
+    assert s["perf_summary"]["perf_logging_enabled"] is False
+    print("PASS perf_enabled_flag: perf_summary.perf_logging_enabled 가 --no-perf-log 반영")
+
+
+def test_perf_log_line_format_and_prefix():
+    sample = {"tick_index": 7, "seat_id": "Seat1", "total_tick_duration": 84.2,
+              "schedule_drift_seconds": 24.2, "camera_start_wait": 1.1, "warmup_duration": 3.0,
+              "frame_collect_duration": 5.0, "inference_duration": 0.2,
+              "supabase_save_duration": 0.4, "camera_stop_duration": 0.8,
+              "preview_capture_duration": 7.1, "preview_transcode_duration": 2.3,
+              "cleanup_duration": 0.0, "sleep_until_next_tick_duration": 0.0,
+              "reconnects": 0, "saved": True, "preview_status": "available",
+              "tick_error": False, "preview_error": False}
+    line = e2e._format_perf_line(sample)
+    assert line.startswith("[perf Seat1] tick=7")
+    assert "total=84.2s" in line and "drift=24.2s" in line
+    assert "preview_capture=7.1s" in line and "transcode=2.3s" in line
+    assert "saved=True" in line and "preview=available" in line and "errors=0" in line
+    print("PASS perf_line: [perf Seat1] 한 줄 요약 형식/접두사")
+
+
+def test_parse_perf_log_flag():
+    assert e2e.parse_args(["--duration", "1"]).perf_log is True           # 기본 켜짐
+    assert e2e.parse_args(["--duration", "1", "--no-perf-log"]).perf_log is False
+    assert e2e.parse_args(["--duration", "1", "--perf-log"]).perf_log is True
+    print("PASS parse_perf_log: --perf-log/--no-perf-log 파싱(기본 켜짐)")
+
+
+def test_verify_accumulation_does_not_run_perf_loop(monkeypatch):
+    called = {"run": False}
+
+    def boom_run_duration(self, *a, **k):
+        called["run"] = True
+        raise AssertionError("verify-accumulation 이 perf loop 를 돌리면 안 됨")
+
+    monkeypatch.setattr(e2e.Seat1E2ERunner, "run_duration", boom_run_duration)
+    monkeypatch.setattr(e2e, "verify_accumulation",
+                        lambda seat, limit, repository=None: {
+                            "seat_id": seat, "total_rows": 0, "activity_counts": {},
+                            "earliest_decided_at": None, "latest_decided_at": None})
+    rc = e2e.main(["--verify-accumulation", "--seat", "Seat1", "--fake"])
+    assert rc == 0 and called["run"] is False
+    print("PASS verify_no_perf_loop: --verify-accumulation 은 read-only(perf loop 없음)")
+
+
 def main():
     test_mask_rtsp()
     test_preflight_safe_and_no_secret()
@@ -553,6 +721,17 @@ def main():
     test_parse_new_options()
     test_mode_group_mutually_exclusive()
     test_no_side_effects_in_source_still_clean()
+    # v0.8 perf(계측) — monkeypatch fixture 필요한 test 는 pytest 로만 실행
+    test_perf_sample_per_tick_and_summary_present()
+    test_perf_summary_keys_in_duration_summary()
+    test_save_duration_only_when_save()
+    test_preview_duration_only_when_preview()
+    test_perf_summary_generated_even_on_preview_failure()
+    test_perf_sample_kept_on_tick_exception()
+    test_perf_sample_values_are_scalar_no_binary()
+    test_perf_logging_enabled_reflects_flag()
+    test_perf_log_line_format_and_prefix()
+    test_parse_perf_log_flag()
     print("\nALL PASS: mask / preflight / single / skipped_engine / no_save / save / "
           "save_fail / duration / no_side_effects / intact / truthy / read_seat_enabled / "
           "preflight_enabled / debug_metrics / debug_metrics(object) / "

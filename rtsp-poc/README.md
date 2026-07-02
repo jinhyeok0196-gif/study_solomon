@@ -875,7 +875,12 @@ python seat1_e2e_test.py --single --save                   # + Supabase 저장
 python seat1_e2e_test.py --single --camera-seconds 15       # warm-up/수집 시간 늘리기(frames=0 대응)
 python seat1_e2e_test.py --single --fake --engines opencv,mediapipe,yolo   # 카메라 없이(CI)
 python seat1_e2e_test.py --duration 5 --interval 60 --save  # 5분 반복(최소 30초) 저장
+python seat1_e2e_test.py --duration 60 --interval 60 --save --preview --seat Seat1   # v0.8 현장 재테스트(단계별 perf 로그)
 ```
+- `--perf-log`(v0.8, 기본 **켜짐**, `--no-perf-log` 로 끔): 각 tick 단계별 소요시간을 `[perf Seat1]` 한 줄 요약으로 로그하고,
+  종료 시 `perf_summary`(avg/max total tick, avg/max schedule_drift, slowest_tick_breakdown)를 출력한다.
+  **⚠️ v0.8 은 tick 지연 원인 "관찰(계측)" 단계다 — 스케줄링을 고치지 않는다.** 고정 sleep(interval) 방식은 그대로이며
+  1분 주기 정확도는 아직 미개선(개선 여부는 계측 결과로 별도 결정). 계측값은 수치/텍스트만 남기며 영상/프레임 저장 없음.
 - `--camera-seconds`(real, 기본 **10초**, 최소 1): RTSP warm-up + 프레임 수집 시간. **frames=0 이면 늘리세요**(예: 15~20).
   warm-up 동안 2초마다 **연결 성공/실패·buffer_len·frames_received·last_frame_age·마지막 프레임 시각(last_ts)** 을 자세히 로그한다(영상/이미지 저장 없음, 수치/시각만).
 - `--engines` 기본 `opencv`. MediaPipe/YOLO 는 모델/라이브러리 없으면 SKIPPED(전체 실패 아님) → FactsFusion 이 SUCCESS/PARTIAL 처리.

@@ -296,7 +296,7 @@ STAGE 2 60분 save+preview 테스트(`--duration 60 --interval 60`).
 
 STAGE 2 통과 = "구조가 살아있다" 확인. 아래는 **실운영 상시 가동 전** 정리/결정이 필요한 항목이다.
 
-1. **tick 지연 원인 분석** — §9의 단계별 duration logging 추가(run_once/캡처/트랜스코딩/카메라 open·close/sleep drift 각 단계 소요시간 계측). 원인은 아직 미확정이므로 계측 후 판단.
+1. **tick 지연 원인 분석** — §9의 단계별 duration logging 추가(run_once/캡처/트랜스코딩/카메라 open·close/sleep drift 각 단계 소요시간 계측). 원인은 아직 미확정이므로 계측 후 판단. → **v0.8 계측 구현 완료**(`seat1_e2e_test.py --perf-log` 기본 켜짐 + `perf_summary`, `[perf Seat1]` 한 줄 로그). 스케줄링은 미변경(관찰 단계). 상세: `cto_handoff_v0.8_tick_perf_logging.md`. 다음: 현장 60분 재테스트 후 `perf_summary` 분석.
 2. **1분 주기 정확도 개선 여부 결정** — 고정 sleep(interval) → "다음 정각 정렬(drift 보정)" 스케줄로 바꿀지, 아니면 "지연 허용 + 저장/preview 무결성 우선" 현행 유지로 확정할지 CTO 결정.
 3. **save path 의존성 requirements 반영 확인** — `supabase` 패키지를 `requirements.txt`에 반영 완료(v0.7). 현장 재배포 시 `pip install -r requirements.txt`로 재현되는지 확인.
 4. **YOLO/MediaPipe 모델 배치 계획** — 현재 현장에 `models/*.pt`/MediaPipe 모델 없음(preflight WARN, preview 검증엔 non-blocking). 실제 활동판정 정확도용 모델 배치·버전관리 계획(모델 파일은 커밋 금지).

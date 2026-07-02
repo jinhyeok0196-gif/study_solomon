@@ -47,6 +47,82 @@ ENG_SUCCESS = "SUCCESS"
 ENG_SKIPPED = "SKIPPED"
 ENG_FAILED = "FAILED"
 
+# v0.8 perf(계측) — tick 단계별 소요시간 로그 접두사(사람이 바로 읽는 한 줄 요약)
+PERF_LOG_PREFIX = "perf"
+
+
+def _round1(x: Any) -> float:
+    """로그/요약용 1자리 반올림(초). None/비수치는 0.0."""
+    try:
+        return round(float(x), 1)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _round3(x: Any) -> float:
+    """샘플 저장용 3자리 반올림(초). None/비수치는 0.0."""
+    try:
+        return round(float(x), 3)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _new_capture_perf() -> Dict[str, float]:
+    """burst 수집 단계 타이머 기본값(fake 모드/미측정 시 0)."""
+    return {"camera_start_wait": 0.0, "warmup_duration": 0.0,
+            "frame_collect_duration": 0.0, "reconnects": 0}
+
+
+# perf sample 의 단계별 소요시간 키(요약/브레이크다운 순서)
+PERF_STAGE_KEYS = (
+    "camera_start_wait", "warmup_duration", "frame_collect_duration",
+    "inference_duration", "supabase_save_duration", "camera_stop_duration",
+    "preview_capture_duration", "preview_transcode_duration",
+    "cleanup_duration", "sleep_until_next_tick_duration",
+)
+
+
+def _format_perf_line(s: Dict[str, Any]) -> str:
+    """사람이 바로 읽는 한 줄 perf 요약. 접두사 '[perf <Seat>]'."""
+    errs = int(bool(s.get("tick_error"))) + int(bool(s.get("preview_error")))
+    return ("[{pfx} {seat}] tick={t} total={tot}s drift={dr}s camera_start={cs}s "
+            "warmup={wu}s collect={col}s inference={inf}s save={sv}s camera_stop={cst}s "
+            "preview_capture={pc}s transcode={tc}s cleanup={cl}s sleep={sl}s "
+            "reconnects={rc} saved={sav} preview={pv} errors={er}").format(
+        pfx=PERF_LOG_PREFIX, seat=s.get("seat_id"), t=s.get("tick_index"),
+        tot=_round1(s.get("total_tick_duration")), dr=_round1(s.get("schedule_drift_seconds")),
+        cs=_round1(s.get("camera_start_wait")), wu=_round1(s.get("warmup_duration")),
+        col=_round1(s.get("frame_collect_duration")), inf=_round1(s.get("inference_duration")),
+        sv=_round1(s.get("supabase_save_duration")), cst=_round1(s.get("camera_stop_duration")),
+        pc=_round1(s.get("preview_capture_duration")),
+        tc=_round1(s.get("preview_transcode_duration")),
+        cl=_round1(s.get("cleanup_duration")),
+        sl=_round1(s.get("sleep_until_next_tick_duration")),
+        rc=int(s.get("reconnects", 0) or 0), sav=s.get("saved"),
+        pv=(s.get("preview_status") or "none"), er=errs)
+
+
+def summarize_perf(samples: List[Dict[str, Any]], perf_logging_enabled: bool) -> Dict[str, Any]:
+    """tick perf 샘플 목록 → 종료 summary 용 집계(평균/최대/최느린 tick 분해)."""
+    if not samples:
+        return {"total_perf_samples": 0, "perf_logging_enabled": bool(perf_logging_enabled),
+                "avg_total_tick_duration": 0.0, "max_total_tick_duration": 0.0,
+                "avg_schedule_drift_seconds": 0.0, "max_schedule_drift_seconds": 0.0,
+                "slowest_tick_index": None, "slowest_tick_breakdown": {}}
+    totals = [float(s.get("total_tick_duration") or 0.0) for s in samples]
+    drifts = [float(s.get("schedule_drift_seconds") or 0.0) for s in samples]
+    slowest = max(samples, key=lambda s: float(s.get("total_tick_duration") or 0.0))
+    return {
+        "total_perf_samples": len(samples),
+        "perf_logging_enabled": bool(perf_logging_enabled),
+        "avg_total_tick_duration": _round1(sum(totals) / len(totals)),
+        "max_total_tick_duration": _round1(max(totals)),
+        "avg_schedule_drift_seconds": _round1(sum(drifts) / len(drifts)),
+        "max_schedule_drift_seconds": _round1(max(drifts)),
+        "slowest_tick_index": slowest.get("tick_index"),
+        "slowest_tick_breakdown": {k: _round3(slowest.get(k)) for k in PERF_STAGE_KEYS},
+    }
+
 
 # ============================================================ 보안/마스킹
 def mask_rtsp(url: Optional[str]) -> str:
@@ -441,7 +517,8 @@ class Seat1E2ERunner:
                  preview: bool = False,
                  preview_seconds: float = 5.0,
                  preview_ttl: Optional[float] = None,
-                 preview_capturer: Optional[Any] = None) -> None:
+                 preview_capturer: Optional[Any] = None,
+                 perf_log: bool = True) -> None:
         self.seat = seat
         self.engines = engines or list(DEFAULT_ENGINES)
         self.fake = fake
@@ -455,6 +532,9 @@ class Seat1E2ERunner:
         self.preview_ttl = None if preview_ttl is None else max(1.0, float(preview_ttl))
         self._preview_capturer = preview_capturer  # 테스트 주입용(무한/실카메라 방지)
         self._cm = None  # 실제 CameraManager(real 모드)
+        # v0.8 tick 지연 계측: 단계별 소요시간 로그/요약(동작 구조 변경 없음, 관찰만)
+        self.perf_log = bool(perf_log)
+        self._capture_perf: Dict[str, float] = _new_capture_perf()
 
     # ----- 카메라 상태 로그(영상/이미지 저장 없음, 수치/시각만) -----
     def _log_camera_status(self, cm, seat: str, label: str) -> dict:
@@ -487,12 +567,15 @@ class Seat1E2ERunner:
                                  status_interval=5.0)
         log.info("[camera %s] RTSP 연결 시도 - warm-up %.1fs (--camera-seconds 로 조절)",
                  self.seat, self.camera_seconds)
+        # v0.8 계측: 카메라 open/warm-up/수집 단계 소요시간(동작 변경 없음).
+        _t_cam_start = time.perf_counter()
         self._cm.start_camera(self.seat)
 
         # warm-up 폴링: 연결/버퍼가 차오르는 과정을 주기적으로 로그
         poll = 2.0
         waited = 0.0
         connected_logged = False
+        _connected_at: Optional[float] = None
         while waited < self.camera_seconds:
             step = min(poll, self.camera_seconds - waited)
             time.sleep(step)
@@ -500,16 +583,29 @@ class Seat1E2ERunner:
             h = self._log_camera_status(
                 self._cm, self.seat, f"warm-up {waited:.0f}/{self.camera_seconds:.0f}s")
             if h["connected"] and not connected_logged:
+                _connected_at = time.perf_counter()
                 log.info("[camera %s] RTSP 연결 성공 (frames_received=%d)",
                          self.seat, h["frames_received"])
                 connected_logged = True
 
+        _warmup_end = time.perf_counter()
         final = self._log_camera_status(self._cm, self.seat, "warm-up 완료")
         if not final["connected"]:
             log.warning("[camera %s] RTSP 연결 실패 - URL/인증/네트워크/경로(stream2) 또는 "
                         "tcp↔udp 확인", self.seat)
 
+        _t_collect = time.perf_counter()
         frames = self._cm.get_recent_frames(self.seat, seconds=self.camera_seconds)
+        # ⚠️ 한계: camera_start_wait 은 warm-up 폴링 주기(2s) 해상도로만 관측된다.
+        #    warmup_duration 은 연결 대기 구간을 포함(camera_start_wait 를 부분집합으로 포함).
+        self._capture_perf = {
+            "camera_start_wait": _round3(
+                (_connected_at - _t_cam_start) if _connected_at is not None
+                else (_warmup_end - _t_cam_start)),
+            "warmup_duration": _round3(_warmup_end - _t_cam_start),
+            "frame_collect_duration": _round3(time.perf_counter() - _t_collect),
+            "reconnects": int(final.get("reconnects", 0) or 0),
+        }
         log.info("[camera %s] 최근 프레임 수집: %d개 (window %.1fs, 링버퍼 상한 내)",
                  self.seat, len(frames), self.camera_seconds)
         if not frames:
@@ -563,11 +659,17 @@ class Seat1E2ERunner:
         errors: List[str] = []
         engine_statuses: Dict[str, str] = {}
         results: List[Any] = []
+        # v0.8 계측 타이머(초). 동작 순서/구조는 그대로, 측정만 추가.
+        inference_duration = 0.0
+        supabase_save_duration = 0.0
+        camera_stop_duration = 0.0
 
+        self._capture_perf = _new_capture_perf()   # _make_burst(real)에서 채움, fake 는 0
         burst = self._make_burst()
         frame_count = getattr(burst, "frame_count", 0)
 
         try:
+            _t_infer0 = time.perf_counter()
             for name in self.engines:
                 res, status, reason = _run_engine(name, burst, self.seat, self.fake)
                 engine_statuses[name] = status
@@ -592,16 +694,20 @@ class Seat1E2ERunner:
             rule = RuleEngine()
             rule.initialize()
             decision = rule.decide(fr.seat_facts)
+            # inference = engines + fusion + rule (판정 연산 전체)
+            inference_duration = time.perf_counter() - _t_infer0
 
             saved = False
             decision_uuid = decision.decision_uuid
             if self.save:
+                _t_save0 = time.perf_counter()
                 try:
                     repo = self._get_repository()
                     repo.save_decision(decision)   # insert 만(update/delete 없음)
                     saved = True
                 except Exception as exc:
                     errors.append(f"save: {type(exc).__name__}: {exc}")
+                supabase_save_duration = time.perf_counter() - _t_save0
 
             dbg = None
             if self.debug_metrics:
@@ -610,9 +716,22 @@ class Seat1E2ERunner:
                                           self.camera_seconds, burst, fr, decision,
                                           engine_statuses=engine_statuses)
         finally:
+            _t_stop0 = time.perf_counter()
             self._shutdown_camera()
+            camera_stop_duration = time.perf_counter() - _t_stop0
 
         ended = datetime.now()
+        # run_once 단계 perf(초). preview/cleanup/sleep/drift 는 run_duration 에서 합산.
+        perf = {
+            "tick_started_at": started.isoformat(),
+            "camera_start_wait": _round3(self._capture_perf.get("camera_start_wait")),
+            "warmup_duration": _round3(self._capture_perf.get("warmup_duration")),
+            "frame_collect_duration": _round3(self._capture_perf.get("frame_collect_duration")),
+            "inference_duration": _round3(inference_duration),
+            "supabase_save_duration": _round3(supabase_save_duration),
+            "camera_stop_duration": _round3(camera_stop_duration),
+            "reconnects": int(self._capture_perf.get("reconnects", 0) or 0),
+        }
         return {
             "run_id": run_id,
             "mode": "fake" if self.fake else "real",
@@ -632,6 +751,7 @@ class Seat1E2ERunner:
             "decision_uuid": decision_uuid,
             "errors": errors,
             "debug_metrics": dbg,
+            "perf": perf,
         }
 
     # ----- duration 반복 -----
@@ -655,6 +775,7 @@ class Seat1E2ERunner:
         capturer = self._build_capturer(interval) if self.preview else None
 
         runs: List[Dict[str, Any]] = []
+        perf_samples: List[Dict[str, Any]] = []
         tick_errors = 0
         preview_errors = 0
         previews_generated = 0
@@ -671,42 +792,108 @@ class Seat1E2ERunner:
         try:
             while not _reached_limit() and not _past_deadline():
                 n += 1
+                # ---- v0.8 tick 계측 시작(동작 순서/구조는 그대로) ----
+                tick_perf0 = time.perf_counter()
+                tick_error = False
+                preview_error_flag = False
+                preview_status = None
+                preview_available = False
+                preview_capture_duration = 0.0
+                preview_transcode_duration = 0.0
+                cleanup_duration = 0.0
+                run_perf: Dict[str, Any] = {}
+                saved_flag = False
                 try:
                     r = self.run_once()  # 카메라 open→판정→shutdown, save 는 내부에서 (self.save 일 때만)
                     runs.append(r)
-                    preview_status = None
+                    run_perf = r.get("perf", {}) or {}
+                    saved_flag = bool(r.get("saved"))
                     # 카메라가 완전히 닫힌 뒤(run_once finally 에서 shutdown) 순차로 클립 캡처
                     if capturer is not None:
+                        _t_pc0 = time.perf_counter()
                         try:
                             meta = capturer.capture()  # 예외 대신 status 반환. DB 미접근.
-                            preview_status = meta.get("status") if isinstance(meta, dict) else None
+                            preview_capture_duration = time.perf_counter() - _t_pc0
+                            if isinstance(meta, dict):
+                                preview_status = meta.get("status")
+                                preview_transcode_duration = _round3(
+                                    meta.get("transcode_duration_seconds"))
                             if preview_status == "available":
                                 previews_generated += 1
+                                preview_available = True
                             else:
                                 preview_errors += 1
+                                preview_error_flag = True
                         except Exception as exc:  # 방어(capture 는 원칙적으로 예외 안 냄)
+                            preview_capture_duration = time.perf_counter() - _t_pc0
                             preview_errors += 1
+                            preview_error_flag = True
                             log.warning("[tick %d] preview capture 예외 - 다음 tick 진행: %s: %s",
                                         n, type(exc).__name__, exc)
+                        _t_cl0 = time.perf_counter()
                         try:
                             cleanup_removed += capturer.cleanup_expired()
                         except Exception as exc:
                             log.warning("[tick %d] cleanup_expired 실패(무시): %s: %s",
                                         n, type(exc).__name__, exc)
+                        cleanup_duration = time.perf_counter() - _t_cl0
                     log.info("Tick %d: activity=%s confidence=%s saved=%s preview=%s",
                              n, r["activity"], r["confidence"], r["saved"], preview_status)
                 except KeyboardInterrupt:
                     raise
                 except Exception as exc:  # run_once/그 외 tick 예외 격리
                     tick_errors += 1
+                    tick_error = True
                     log.warning("[tick %d] 예외 격리 - 다음 tick 진행: %s: %s",
                                 n, type(exc).__name__, exc)
 
-                if _reached_limit() or _past_deadline():
+                # 작업 소요(sleep 제외). 예외 tick 도 여기까지의 시간이 기록된다.
+                total_tick_duration = time.perf_counter() - tick_perf0
+
+                # ---- sleep: 기존 고정 방식 유지(동작 변경 없음, 계측만) ----
+                do_sleep = not (_reached_limit() or _past_deadline())
+                if do_sleep and deadline is not None and time.time() + interval > deadline:
+                    do_sleep = False
+                sleep_dur = 0.0
+                if do_sleep:
+                    _t_sleep0 = time.perf_counter()
+                    sleep_fn(interval)
+                    sleep_dur = time.perf_counter() - _t_sleep0
+
+                # schedule_drift = (이번 tick 실제 주기) - 목표 interval.
+                # ⚠️ 고정 sleep(interval) 유지 → sleep≈interval → drift≈작업시간 초과분.
+                #    v0.8 은 개선이 아니라 관찰이 목적(1분 주기 정확도는 아직 미개선).
+                schedule_drift = (total_tick_duration + sleep_dur) - interval
+
+                sample = {
+                    "tick_index": n,
+                    "seat_id": self.seat,
+                    "tick_started_at": run_perf.get("tick_started_at"),
+                    "camera_start_wait": _round3(run_perf.get("camera_start_wait")),
+                    "warmup_duration": _round3(run_perf.get("warmup_duration")),
+                    "frame_collect_duration": _round3(run_perf.get("frame_collect_duration")),
+                    "inference_duration": _round3(run_perf.get("inference_duration")),
+                    "supabase_save_duration": _round3(run_perf.get("supabase_save_duration")),
+                    "camera_stop_duration": _round3(run_perf.get("camera_stop_duration")),
+                    "preview_capture_duration": _round3(preview_capture_duration),
+                    "preview_transcode_duration": _round3(preview_transcode_duration),
+                    "cleanup_duration": _round3(cleanup_duration),
+                    "total_tick_duration": _round3(total_tick_duration),
+                    "sleep_until_next_tick_duration": _round3(sleep_dur),
+                    "schedule_drift_seconds": _round3(schedule_drift),
+                    "reconnects": int(run_perf.get("reconnects", 0) or 0),
+                    "saved": saved_flag,
+                    "preview_available": preview_available,
+                    "preview_status": preview_status,
+                    "tick_error": tick_error,
+                    "preview_error": preview_error_flag,
+                }
+                perf_samples.append(sample)
+                if self.perf_log:
+                    log.info("%s", _format_perf_line(sample))
+
+                if not do_sleep:
                     break
-                if deadline is not None and time.time() + interval > deadline:
-                    break
-                sleep_fn(interval)
         except KeyboardInterrupt:
             interrupted = True
             log.info("KeyboardInterrupt 감지 - 요약 출력 후 정상 종료")
@@ -723,6 +910,8 @@ class Seat1E2ERunner:
             "forever": bool(forever), "interrupted": interrupted,
             "tick_errors": tick_errors, "preview_errors": preview_errors,
             "previews_generated": previews_generated, "cleanup_removed": cleanup_removed,
+            "perf_summary": summarize_perf(perf_samples, self.perf_log),
+            "perf_samples": perf_samples,
             "runs": runs,
         }
 
@@ -956,7 +1145,28 @@ def _print_duration_summary(summary: Dict[str, Any], save: bool, preview: bool) 
         print(f"  previews_generated: {summary.get('previews_generated', 0)}  "
               f"preview_errors: {summary.get('preview_errors', 0)}  "
               f"cleanup_removed: {summary.get('cleanup_removed', 0)}")
+    _print_perf_summary(summary.get("perf_summary"))
     print("  dashboard_stabilized_candidate: 3회 이상 저장 시 대시보드에 안정화 후보 표시")
+
+
+def _print_perf_summary(ps: Optional[Dict[str, Any]]) -> None:
+    """v0.8 tick 지연 계측 요약(단계별 소요시간). 개선이 아니라 관찰용."""
+    if not ps:
+        return
+    print("perf_summary:")
+    print(f"  total_perf_samples: {ps.get('total_perf_samples', 0)}")
+    print(f"  perf_logging_enabled: {ps.get('perf_logging_enabled')}")
+    print(f"  avg_total_tick_duration: {ps.get('avg_total_tick_duration')}")
+    print(f"  max_total_tick_duration: {ps.get('max_total_tick_duration')}")
+    print(f"  avg_schedule_drift_seconds: {ps.get('avg_schedule_drift_seconds')}")
+    print(f"  max_schedule_drift_seconds: {ps.get('max_schedule_drift_seconds')}")
+    print(f"  slowest_tick_index: {ps.get('slowest_tick_index')}")
+    breakdown = ps.get("slowest_tick_breakdown") or {}
+    if breakdown:
+        print("  slowest_tick_breakdown:")
+        for k, v in breakdown.items():
+            print(f"    {k}: {v}")
+    print("  ※ 고정 sleep(interval) 유지 → 1분 주기 정확도 미개선. 원인 관찰용 계측(v0.8).")
 
 
 def _write_result(here: str, payload: Dict[str, Any]) -> str:
@@ -1005,6 +1215,8 @@ def parse_args(argv=None):
     p.add_argument("--fake", action="store_true", help="실제 RTSP 없이 합성 프레임/엔진 사용")
     p.add_argument("--debug-metrics", action="store_true",
                    help="UNKNOWN 원인 구분용 수치/텍스트 메트릭 출력(이미지/프레임 저장 없음)")
+    p.add_argument("--perf-log", action=argparse.BooleanOptionalAction, default=True,
+                   help="tick 단계별 소요시간 로그/요약(기본 켜짐, --no-perf-log 로 끔)")
     p.add_argument("--write-result", action="store_true", help="logs/e2e/ 에 결과 JSON 저장")
     return p.parse_args(argv)
 
@@ -1043,7 +1255,8 @@ def main(argv=None) -> int:
                             debug_metrics=bool(args.debug_metrics),
                             preview=bool(args.preview),
                             preview_seconds=args.preview_seconds,
-                            preview_ttl=args.preview_ttl)
+                            preview_ttl=args.preview_ttl,
+                            perf_log=bool(args.perf_log))
 
     # --forever 또는 --duration 0 → 무기한. (mode 그룹이라 동시 지정은 argparse 가 차단)
     forever = bool(args.forever) or (args.duration is not None and args.duration == 0)
