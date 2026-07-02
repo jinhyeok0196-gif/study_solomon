@@ -10,7 +10,7 @@
 
 - 작성일: 2026-07-02
 - 개정: **v4 — Python·프론트 커밋 완료 반영**
-- 상태: **Python 1차 커밋 `f218c8f` + 프론트 2차 커밋 `0ea218a` 완료(브랜치 `feat/v0.7-seat1-repeat`, 미푸시) · 테스트 통과(py 34/158, FE 51) · build OK · 현장 데스크탑 2단계 실검증 대기**
+- 상태: **Python 1차 커밋 `f218c8f` + 프론트 2차 커밋 `0ea218a` 완료(브랜치 `feat/v0.7-seat1-repeat`, origin push 완료) · 테스트 통과(py 34/158, FE 51) · build OK · 현장 데스크탑 2단계 실검증 대기**
 - 대상 좌석: Seat1 (VIGI 서브스트림 `stream2`)
 - RTSP(마스킹): `rtsp://admin:****@192.168.219.50:554/stream2`
 
@@ -75,7 +75,7 @@
 
 ## 3. 2단계 — v0.7 Seat1 반복 안정화 (코드 수정)
 
-> **구현 현황(2026-07-02):** Python **구현 완료 + 1차 커밋 완료**(`f218c8f`). 프론트 **구현/테스트 완료(미커밋)**.
+> **구현 현황(2026-07-02):** Python **구현 완료 + 1차 커밋 완료**(`f218c8f`). 프론트 **구현/테스트 완료 + 2차 커밋 완료**(`0ea218a`).
 > - `rtsp-poc/seat1_e2e_test.py` **수정 완료** — `--preview` 통합, `--forever`/`--duration 0` 무기한, tick 예외 격리, `--verify-accumulation`(read-only), TTL `max(120, interval+30)` 보정.
 > - `rtsp-poc/test_seat1_e2e_test.py` **v0.7 테스트 17개 추가 완료**.
 > - `preview_clip_capture.py` / `preview_bridge_server.py` **무수정 재사용**(캡처 클래스 그대로).
@@ -126,7 +126,7 @@ python seat1_e2e_test.py --verify-accumulation --seat Seat1 --limit 50
 
 현재 결함: `AIDecisionSection.tsx`의 `nowMs=Date.now()`가 tick 안 함 + `SeatPreviewButton` fetch가 mount 1회.
 수정: 주기 refetch(~30s) + `nowMs` tick 승격 + 만료 문구("만료됨 · 곧 재생성") + 남은시간 힌트(`previewRemainingSeconds`).
-**구현 완료(프론트, 미커밋):** `previewTypes.ts`(`previewRemainingSeconds` 헬퍼, `preview_expired='만료됨 · 곧 재생성'`, `PREVIEW_REFETCH_INTERVAL_MS=30000`), `AIDecisionSection.tsx`(`Date.now()` → `useState`+`setInterval(30s)` tick, cleanup `clearInterval`), `SeatPreviewButton.tsx`(`useBridgePreview` 30초 주기 refetch + `clearInterval`/`AbortController.abort()` 정리 + `~n초 후 재생성` 남은시간 표시). available → expired → (다음 tick 클립 생성 후 30초 내) 재생성 자연 전이.
+**구현 완료(프론트, 2차 커밋 완료 `0ea218a`):** `previewTypes.ts`(`previewRemainingSeconds` 헬퍼, `preview_expired='만료됨 · 곧 재생성'`, `PREVIEW_REFETCH_INTERVAL_MS=30000`), `AIDecisionSection.tsx`(`Date.now()` → `useState`+`setInterval(30s)` tick, cleanup `clearInterval`), `SeatPreviewButton.tsx`(`useBridgePreview` 30초 주기 refetch + `clearInterval`/`AbortController.abort()` 정리 + `~n초 후 재생성` 남은시간 표시). available → expired → (다음 tick 클립 생성 후 30초 내) 재생성 자연 전이.
 
 ### 3.5 테스트 결과
 
@@ -200,7 +200,7 @@ npm run dev
 ## 6. 검증 기준 (Definition of Done)
 
 **1단계**
-- [ ] 현장 데스크탑에서 §2 체크리스트 전부 통과.
+- [x] 현장 데스크탑에서 §2 체크리스트 전부 통과.
 
 **2단계**
 - [ ] `--preview` 매 tick 판정 + `latest.mp4/latest.json` 재생성.
