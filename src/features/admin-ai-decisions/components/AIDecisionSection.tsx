@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Spinner } from '@/components/ui/Spinner';
 import {
@@ -12,6 +12,7 @@ import {
 } from '../hooks';
 import { AI_DISCLAIMER, SEAT_IDS, type AIDecisionRow, type AIDecisionFilters } from '../types';
 import type { StabilizedCandidate } from '../stabilizedTypes';
+import { PREVIEW_REFETCH_INTERVAL_MS } from '../previewTypes';
 import { AIDecisionSeatGrid } from './AIDecisionSeatGrid';
 import { AIDecisionLogTable } from './AIDecisionLogTable';
 import { AIDecisionDetailDrawer } from './AIDecisionDetailDrawer';
@@ -36,7 +37,14 @@ export function AIDecisionSection() {
   const stabilizedQuery = useStabilizedCandidatesQuery(SEAT_IDS);
   const logQuery = useRecentAIDecisionsQuery(filters);
 
-  const nowMs = Date.now();
+  // preview 만료/재생성이 화면에 자연스럽게 반영되도록 주기적으로 now 를 갱신한다.
+  // (Date.now() 를 렌더 1회만 읽으면 available→expired 전이가 리렌더 전까지 멈춘다)
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), PREVIEW_REFETCH_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
+
   const refresh = () => {
     qc.invalidateQueries({ queryKey: SEAT_DECISIONS_KEY });
     qc.invalidateQueries({ queryKey: RECENT_DECISIONS_KEY });

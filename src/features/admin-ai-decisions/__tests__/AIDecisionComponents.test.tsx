@@ -7,6 +7,7 @@ import { AIDecisionSeatGrid } from '../components/AIDecisionSeatGrid';
 import { AIDecisionLogTable } from '../components/AIDecisionLogTable';
 import { AIDecisionDetailDrawer } from '../components/AIDecisionDetailDrawer';
 import { AI_DISCLAIMER, type AIDecisionRow } from '../types';
+import { previewRemainingSeconds } from '../previewTypes';
 
 function row(over: Partial<AIDecisionRow> = {}): AIDecisionRow {
   return {
@@ -116,7 +117,7 @@ describe('AIDecisionSeatCard', () => {
         onOpen={vi.fn()}
       />,
     );
-    expect(screen.getByText('미리보기 만료됨')).toBeInTheDocument();
+    expect(screen.getByText(/만료됨/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '최근 5초 보기' })).toBeNull();
   });
 
@@ -174,6 +175,49 @@ describe('AIDecisionDetailDrawer', () => {
   it('row 가 null 이면 아무것도 렌더하지 않는다', () => {
     const { container } = render(<AIDecisionDetailDrawer row={null} onClose={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe('preview 만료 UX (previewRemainingSeconds / 전이 / 남은시간)', () => {
+  it('previewRemainingSeconds: 남은 초(올림) · 만료 후 0 · 없거나 파싱불가면 null', () => {
+    expect(previewRemainingSeconds(row(), Date.now())).toBeNull();          // expires_at 없음
+    const r = row({ preview_expires_at: new Date(1_000_000).toISOString() });
+    expect(previewRemainingSeconds(r, 1_000_000 - 45_000)).toBe(45);        // 45초 남음
+    expect(previewRemainingSeconds(r, 1_000_000 + 5_000)).toBe(0);          // 이미 만료 → 0
+    expect(previewRemainingSeconds(row({ preview_expires_at: 'nope' }), Date.now())).toBeNull();
+  });
+
+  it('available 이면 만료까지 남은 시간을 표시한다', () => {
+    render(
+      <AIDecisionSeatCard
+        seatId="Seat1"
+        row={row({
+          preview_status: 'available',
+          preview_clip_url: 'blob:local/x',
+          preview_expires_at: new Date(Date.now() + 45_000).toISOString(),
+        })}
+        nowMs={Date.now()}
+        onOpen={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/초 후 재생성/)).toBeInTheDocument();
+  });
+
+  it('nowMs 가 만료시각을 지나면 available → "만료됨" 으로 전이한다', () => {
+    const t0 = 2_000_000;
+    const r = row({
+      preview_status: 'available',
+      preview_clip_url: 'blob:local/x',
+      preview_expires_at: new Date(t0 + 5_000).toISOString(),
+    });
+    const { rerender } = render(
+      <AIDecisionSeatCard seatId="Seat1" row={r} nowMs={t0} onOpen={vi.fn()} />,
+    );
+    expect(screen.getByRole('button', { name: '최근 5초 보기' })).toBeInTheDocument();
+    // now 가 만료시각을 지나면(섹션의 30초 tick 이 nowMs 를 올림) 자동 전이
+    rerender(<AIDecisionSeatCard seatId="Seat1" row={r} nowMs={t0 + 10_000} onOpen={vi.fn()} />);
+    expect(screen.getByText(/만료됨/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '최근 5초 보기' })).toBeNull();
   });
 });
 

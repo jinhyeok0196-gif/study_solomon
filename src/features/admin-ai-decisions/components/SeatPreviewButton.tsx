@@ -3,10 +3,12 @@ import { cn } from '@/lib/utils';
 import type { AIDecisionRow } from '../types';
 import {
   derivePreviewState,
+  previewRemainingSeconds,
   PREVIEW_STATE_LABEL,
   PREVIEW_DISCLAIMERS,
   PREVIEW_DURATION_SECONDS,
   PREVIEW_CODEC_WARNING,
+  PREVIEW_REFETCH_INTERVAL_MS,
   type PreviewDisplayState,
 } from '../previewTypes';
 import { getPreviewBridgeBaseUrl, fetchSeatPreview, type BridgePreviewFields } from '../previewBridge';
@@ -33,24 +35,35 @@ function useBridgePreview(seatId: string): { fields: BridgePreviewFields | null;
       setErrored(false);
       return;
     }
-    const ctrl = new AbortController();
     let alive = true;
-    fetchSeatPreview(base, seatId, ctrl.signal)
-      .then((f) => {
-        if (alive) {
-          setFields(f);
-          setErrored(false);
-        }
-      })
-      .catch(() => {
-        if (alive) {
-          setFields(null);
-          setErrored(true);
-        }
-      });
-    return () => {
+    let ctrl: AbortController | null = null;
+
+    // 30초 주기로 재조회 → 반복 루프가 새 클립을 만들면 available/expired 상태가 갱신된다.
+    const load = () => {
+      ctrl?.abort();                 // 직전 요청이 아직 진행 중이면 취소(중복 방지)
+      ctrl = new AbortController();
+      fetchSeatPreview(base, seatId, ctrl.signal)
+        .then((f) => {
+          if (alive) {
+            setFields(f);
+            setErrored(false);
+          }
+        })
+        .catch((err) => {
+          // 새 요청을 위해 abort 한 경우는 오류가 아니다.
+          if (alive && (err as { name?: string } | undefined)?.name !== 'AbortError') {
+            setFields(null);
+            setErrored(true);
+          }
+        });
+    };
+
+    load();                          // 마운트 즉시 1회
+    const id = setInterval(load, PREVIEW_REFETCH_INTERVAL_MS);
+    return () => {                   // 언마운트 시 타이머/진행 중 요청 정리(누수 방지)
       alive = false;
-      ctrl.abort();
+      clearInterval(id);
+      ctrl?.abort();
     };
   }, [base, seatId]);
 
@@ -88,6 +101,9 @@ export function SeatPreviewButton({ row, nowMs, seatId }: Props) {
   const state = derivePreviewState(effectiveRow, nowMs);
   const label = PREVIEW_STATE_LABEL[state];
   const canPlay = state === 'preview_available' && Boolean(effectiveRow.preview_clip_url);
+  // 재생 가능할 때 만료까지 남은 시간(초) 힌트. 만료되면 라벨이 "만료됨 · 곧 재생성" 으로 전이.
+  const remaining = previewRemainingSeconds(effectiveRow, nowMs);
+  const showRemaining = canPlay && remaining !== null;
   // 브라우저 재생 호환 변환 필요(H.264 아님)일 때만 표시(명시적 false 만).
   const needsTranscode = effectiveRow.preview_browser_compatible === false;
 
@@ -96,6 +112,11 @@ export function SeatPreviewButton({ row, nowMs, seatId }: Props) {
       <div className="flex flex-wrap items-center justify-between gap-1">
         <span className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
           최근 {effectiveRow.preview_duration_seconds ?? PREVIEW_DURATION_SECONDS}초 미리보기
+          {showRemaining && (
+            <span className="ml-1 font-normal normal-case text-gray-400">
+              · ~{remaining}초 후 재생성
+            </span>
+          )}
         </span>
         {canPlay ? (
           <button

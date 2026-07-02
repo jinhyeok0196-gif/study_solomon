@@ -25,6 +25,7 @@ function stubFetchOnce(impl: () => Promise<unknown>) {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -71,7 +72,7 @@ describe('SeatPreviewButton × local bridge', () => {
       }),
     );
     render(<AIDecisionSeatCard seatId="Seat1" row={row()} nowMs={Date.now()} onOpen={vi.fn()} />);
-    expect(await screen.findByText('미리보기 만료됨')).toBeInTheDocument();
+    expect(await screen.findByText(/만료됨/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '최근 5초 보기' })).toBeNull();
   });
 
@@ -118,6 +119,36 @@ describe('SeatPreviewButton × local bridge', () => {
     render(<AIDecisionSeatCard seatId="Seat1" row={row()} nowMs={Date.now()} onOpen={vi.fn()} />);
     expect(await screen.findByRole('button', { name: '최근 5초 보기' })).toBeInTheDocument();
     expect(screen.queryByText(/브라우저 재생 호환 변환이 필요합니다/)).toBeNull();
+  });
+
+  it('bridge 를 30초 주기로 refetch 하고, 언마운트 시 타이머를 정리한다', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('VITE_LOCAL_PREVIEW_BRIDGE_URL', BRIDGE);
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: async () => ({
+          seat_id: 'Seat1',
+          preview_status: 'available',
+          preview_clip_url: `${BRIDGE}/previews/Seat1/latest.mp4`,
+          preview_expires_at: new Date(Date.now() + 90_000).toISOString(),
+        }),
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const { unmount } = render(
+      <AIDecisionSeatCard seatId="Seat1" row={row()} nowMs={Date.now()} onOpen={vi.fn()} />,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1); // 마운트 즉시 1회
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2); // 30초 후 2회
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(fetchMock).toHaveBeenCalledTimes(3); // 60초 후 3회
+
+    unmount();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(fetchMock).toHaveBeenCalledTimes(3); // 정리 후 추가 호출 없음(누수 없음)
   });
 
   it('bridge fetch 실패 시 "미리보기 오류" 를 안전하게 표시한다', async () => {

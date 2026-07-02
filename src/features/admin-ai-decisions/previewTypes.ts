@@ -20,11 +20,14 @@ export type PreviewDisplayState =
 /** 미리보기 기본 길이(초). */
 export const PREVIEW_DURATION_SECONDS = 5;
 
+/** 로컬 bridge preview 재조회 주기(ms). 반복 루프(1분)보다 촘촘히 상태를 반영. */
+export const PREVIEW_REFETCH_INTERVAL_MS = 30_000;
+
 /** 버튼/뱃지 문구. */
 export const PREVIEW_STATE_LABEL: Record<PreviewDisplayState, string> = {
   preview_available: '최근 5초 보기',
   preview_loading: '미리보기 생성 중…',
-  preview_expired: '미리보기 만료됨',
+  preview_expired: '만료됨 · 곧 재생성',
   preview_unavailable: '미리보기 준비 안 됨',
   preview_error: '미리보기 오류',
 };
@@ -44,6 +47,17 @@ export function isPreviewExpired(row: AIDecisionRow, nowMs: number): boolean {
   if (!row.preview_expires_at) return false;
   const t = Date.parse(row.preview_expires_at);
   return Number.isFinite(t) && nowMs > t;
+}
+
+/**
+ * 만료까지 남은 시간(초, 올림). 만료시각이 없거나 파싱 불가면 null.
+ * 이미 만료됐으면 0(음수 없음). 관리자에게 "n초 후 재생성" 힌트를 주는 용도.
+ */
+export function previewRemainingSeconds(row: AIDecisionRow, nowMs: number): number | null {
+  if (!row.preview_expires_at) return null;
+  const t = Date.parse(row.preview_expires_at);
+  if (!Number.isFinite(t)) return null;
+  return Math.max(0, Math.ceil((t - nowMs) / 1000));
 }
 
 /**
