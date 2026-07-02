@@ -385,3 +385,56 @@ NO-GO:
 - AI classification accuracy claim.
 - Automatic attendance / penalty / notification / guardian mutation.
 - Video / frame DB storage.
+
+---
+
+## 22. Commit Completed Report
+
+- **Commit completed: YES**
+- **Push completed: NO**
+- **Branch:** `feat/v0.7-seat1-repeat`
+- **Working tree clean: YES** (at time of commit)
+- **Local branch is ahead of `origin/feat/v0.7-seat1-repeat` by 1 commit**
+- **New commit short hash:** `753c7a6`
+- **New commit full hash:** `753c7a6e4ccfc56eafa17c166642f13e24d24b84`
+- **Commit message:**
+  ```
+  feat(rtsp): add v0.8 tick-delay stage-level perf logging
+  ```
+
+**`git log --oneline -5`:**
+```
+753c7a6 feat(rtsp): add v0.8 tick-delay stage-level perf logging
+64f09ca docs(rtsp): add CTO review for v0.7 Seat1 field verification
+fc0c8a6 docs(rtsp): document Seat1 gateway verification and v0.7 follow-ups
+fadca98 docs(rtsp): document Seat1 gateway verification and v0.7 follow-ups
+0ea218a feat(admin-ai): refresh Seat preview status and expiry UX
+```
+
+**Files included in commit:**
+- `rtsp-poc/seat1_e2e_test.py`
+- `rtsp-poc/preview_clip_capture.py`
+- `rtsp-poc/test_seat1_e2e_test.py`
+- `rtsp-poc/README.md`
+- `rtsp-poc/REVIEW_Seat1_Repeat_v0.7.md`
+- `rtsp-poc/cto_handoff_v0.8_tick_perf_logging.md`
+
+**Commit diff summary:** 6 files changed, 805 insertions, 10 deletions.
+
+> Note: this §22 report was added to the handoff file **after** commit `753c7a6`, so it is an uncommitted working-tree change and is not yet part of that commit. It will be included in the next commit/push if approved.
+
+**Security check (commit contents):**
+- `.env` not included
+- `.env.local` not included
+- service role key not included
+- `sb_secret_*` not included
+- RTSP password not included (masked `rtsp://admin:****@…` only)
+- `models/*.pt` not included
+- `mp4` / `images` / `temp` / `previews` not included
+- `latest.mp4` / `latest.json` not included
+- video / image binaries not included
+
+**CTO next decision:**
+- **Push approval requested: YES**
+- **Field desktop 60-minute perf re-test:** after push
+- **Production-grade unattended multi-seat operation:** still NO-GO
