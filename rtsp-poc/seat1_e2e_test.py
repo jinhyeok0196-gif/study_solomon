@@ -437,7 +437,11 @@ class Seat1E2ERunner:
                  fake: bool = False, save: bool = False,
                  repository: Optional[Any] = None,
                  camera_seconds: float = 10.0,
-                 debug_metrics: bool = False) -> None:
+                 debug_metrics: bool = False,
+                 preview: bool = False,
+                 preview_seconds: float = 5.0,
+                 preview_ttl: Optional[float] = None,
+                 preview_capturer: Optional[Any] = None) -> None:
         self.seat = seat
         self.engines = engines or list(DEFAULT_ENGINES)
         self.fake = fake
@@ -445,6 +449,11 @@ class Seat1E2ERunner:
         self._repository = repository
         self.camera_seconds = max(1.0, float(camera_seconds))
         self.debug_metrics = debug_metrics
+        # v0.7 각 tick 판정 후 preview clip 생성(카메라 순차 접근, DB 미접근)
+        self.preview = preview
+        self.preview_seconds = max(1.0, float(preview_seconds))
+        self.preview_ttl = None if preview_ttl is None else max(1.0, float(preview_ttl))
+        self._preview_capturer = preview_capturer  # 테스트 주입용(무한/실카메라 방지)
         self._cm = None  # 실제 CameraManager(real 모드)
 
     # ----- 카메라 상태 로그(영상/이미지 저장 없음, 수치/시각만) -----
@@ -529,6 +538,24 @@ class Seat1E2ERunner:
         repo.initialize()
         return repo
 
+    def _build_capturer(self, interval: Optional[float] = None):
+        """preview clip capturer 구성(재사용). DB 미접근·영상 임시 파일만.
+
+        TTL 보정: --preview-ttl 미지정 시 max(120, interval+30) 으로 interval 보다 길게.
+        테스트/주입 capturer 가 있으면 그대로 사용(무한 루프·실카메라 방지).
+        """
+        if self._preview_capturer is not None:
+            return self._preview_capturer
+        from preview_clip_capture import PreviewClipCapturer
+        if self.preview_ttl is not None:
+            ttl = self.preview_ttl
+        else:
+            base = float(interval) if interval is not None else float(MIN_INTERVAL_SECONDS)
+            ttl = max(120.0, base + 30.0)
+        return PreviewClipCapturer(seat=self.seat,
+                                   duration_seconds=self.preview_seconds,
+                                   ttl_seconds=ttl)
+
     # ----- 1회 실행 -----
     def run_once(self) -> Dict[str, Any]:
         started = datetime.now()
@@ -608,21 +635,81 @@ class Seat1E2ERunner:
         }
 
     # ----- duration 반복 -----
-    def run_duration(self, minutes: float, interval: float) -> Dict[str, Any]:
+    def run_duration(self, minutes: float, interval: float, *,
+                     forever: bool = False,
+                     max_ticks: Optional[int] = None,
+                     sleep_fn=time.sleep) -> Dict[str, Any]:
+        """N분(또는 무기한) 반복 판정. 각 tick 예외 격리 + (선택) preview clip 생성.
+
+        - forever=True (또는 --duration 0): deadline 없이 무기한 반복.
+        - max_ticks: 테스트에서 무한 실행 방지용 상한(운영 CLI 는 미지정).
+        - sleep_fn: 테스트 주입용(기본 time.sleep). 실제 sleep 없이 루프 검증.
+        - tick 격리: run_once / save / preview capture / cleanup_expired 실패가
+          루프 전체를 중단시키지 않는다. preview 실패는 preview_errors 로만 기록.
+        - KeyboardInterrupt: 요약 출력 후 정상 종료(interrupted=True).
+        - append-only: 저장은 run_once() 내부의 save_decision(insert) 뿐. update/delete 없음.
+        """
         interval = max(MIN_INTERVAL_SECONDS, float(interval))
-        deadline = time.time() + minutes * 60.0
+        deadline = None if forever else time.time() + minutes * 60.0
+
+        capturer = self._build_capturer(interval) if self.preview else None
+
         runs: List[Dict[str, Any]] = []
+        tick_errors = 0
+        preview_errors = 0
+        previews_generated = 0
+        cleanup_removed = 0
+        interrupted = False
         n = 0
-        total_planned = max(1, int((minutes * 60.0) // interval) + 1)
-        while time.time() <= deadline:
-            n += 1
-            r = self.run_once()
-            runs.append(r)
-            log.info("Run %d/%s: activity=%s confidence=%s saved=%s",
-                     n, total_planned, r["activity"], r["confidence"], r["saved"])
-            if time.time() + interval > deadline:
-                break
-            time.sleep(interval)
+
+        def _reached_limit() -> bool:
+            return max_ticks is not None and n >= max_ticks
+
+        def _past_deadline() -> bool:
+            return deadline is not None and time.time() > deadline
+
+        try:
+            while not _reached_limit() and not _past_deadline():
+                n += 1
+                try:
+                    r = self.run_once()  # 카메라 open→판정→shutdown, save 는 내부에서 (self.save 일 때만)
+                    runs.append(r)
+                    preview_status = None
+                    # 카메라가 완전히 닫힌 뒤(run_once finally 에서 shutdown) 순차로 클립 캡처
+                    if capturer is not None:
+                        try:
+                            meta = capturer.capture()  # 예외 대신 status 반환. DB 미접근.
+                            preview_status = meta.get("status") if isinstance(meta, dict) else None
+                            if preview_status == "available":
+                                previews_generated += 1
+                            else:
+                                preview_errors += 1
+                        except Exception as exc:  # 방어(capture 는 원칙적으로 예외 안 냄)
+                            preview_errors += 1
+                            log.warning("[tick %d] preview capture 예외 - 다음 tick 진행: %s: %s",
+                                        n, type(exc).__name__, exc)
+                        try:
+                            cleanup_removed += capturer.cleanup_expired()
+                        except Exception as exc:
+                            log.warning("[tick %d] cleanup_expired 실패(무시): %s: %s",
+                                        n, type(exc).__name__, exc)
+                    log.info("Tick %d: activity=%s confidence=%s saved=%s preview=%s",
+                             n, r["activity"], r["confidence"], r["saved"], preview_status)
+                except KeyboardInterrupt:
+                    raise
+                except Exception as exc:  # run_once/그 외 tick 예외 격리
+                    tick_errors += 1
+                    log.warning("[tick %d] 예외 격리 - 다음 tick 진행: %s: %s",
+                                n, type(exc).__name__, exc)
+
+                if _reached_limit() or _past_deadline():
+                    break
+                if deadline is not None and time.time() + interval > deadline:
+                    break
+                sleep_fn(interval)
+        except KeyboardInterrupt:
+            interrupted = True
+            log.info("KeyboardInterrupt 감지 - 요약 출력 후 정상 종료")
 
         activity_counts: Dict[str, int] = {}
         saved_count = 0
@@ -633,6 +720,9 @@ class Seat1E2ERunner:
         return {
             "total_runs": len(runs), "saved": saved_count,
             "activity_counts": activity_counts, "interval_seconds": interval,
+            "forever": bool(forever), "interrupted": interrupted,
+            "tick_errors": tick_errors, "preview_errors": preview_errors,
+            "previews_generated": previews_generated, "cleanup_removed": cleanup_removed,
             "runs": runs,
         }
 
@@ -736,6 +826,38 @@ def preflight(seat: str, save: bool, fake: bool) -> List[Tuple[str, str]]:
     return out
 
 
+# ============================================================ 누적 검증(읽기 전용)
+def verify_accumulation(seat: str, limit: int = 50,
+                        repository: Optional[Any] = None) -> Dict[str, Any]:
+    """ai_rule_decisions 누적을 읽기 전용으로 집계한다(PHONE/UNKNOWN/ABSENT 등).
+
+    ⚠️ 읽기 전용: get_recent_by_seat(select) 만 호출. insert/update/delete 없음.
+    반환: total_rows / activity_counts / earliest·latest_decided_at.
+    """
+    repo = repository
+    if repo is None:
+        from ai_decision_repository import AIDecisionRepository
+        repo = AIDecisionRepository()
+        repo.initialize()
+    rows = repo.get_recent_by_seat(seat, limit=max(1, int(limit)))
+    activity_counts: Dict[str, int] = {}
+    decided_ats: List[str] = []
+    for row in rows:
+        act = (row.get("activity") or "UNKNOWN") if isinstance(row, dict) else "UNKNOWN"
+        activity_counts[act] = activity_counts.get(act, 0) + 1
+        da = row.get("decided_at") if isinstance(row, dict) else None
+        if da:
+            decided_ats.append(str(da))
+    decided_ats.sort()
+    return {
+        "seat_id": seat,
+        "total_rows": len(rows),
+        "activity_counts": activity_counts,
+        "earliest_decided_at": decided_ats[0] if decided_ats else None,
+        "latest_decided_at": decided_ats[-1] if decided_ats else None,
+    }
+
+
 # ============================================================ 출력
 def _print_preflight(rows: List[Tuple[str, str]]) -> bool:
     print("===== Seat1 E2E Preflight =====")
@@ -813,6 +935,30 @@ def _print_dashboard_guide() -> None:
         print(f"  {i}. {line}")
 
 
+def _print_accumulation(result: Dict[str, Any]) -> None:
+    print("===== 누적 검증(읽기 전용) =====")
+    print(f"  seat_id: {result['seat_id']}  total_rows: {result['total_rows']}")
+    print(f"  activity_counts: {result['activity_counts']}")
+    print(f"  earliest_decided_at: {result['earliest_decided_at']}")
+    print(f"  latest_decided_at: {result['latest_decided_at']}")
+    print("  ※ 읽기 전용 집계 — insert/update/delete 없음. AI 판정은 보조 지표.")
+
+
+def _print_duration_summary(summary: Dict[str, Any], save: bool, preview: bool) -> None:
+    print("===== Duration Summary =====")
+    scope = "forever(무기한)" if summary.get("forever") else "duration"
+    print(f"  mode: {scope}  total_runs: {summary['total_runs']}  saved: {summary['saved']}  "
+          f"interval: {summary['interval_seconds']}s")
+    print(f"  activity_counts: {summary['activity_counts']}")
+    print(f"  tick_errors: {summary.get('tick_errors', 0)}  "
+          f"interrupted: {summary.get('interrupted', False)}")
+    if preview:
+        print(f"  previews_generated: {summary.get('previews_generated', 0)}  "
+              f"preview_errors: {summary.get('preview_errors', 0)}  "
+              f"cleanup_removed: {summary.get('cleanup_removed', 0)}")
+    print("  dashboard_stabilized_candidate: 3회 이상 저장 시 대시보드에 안정화 후보 표시")
+
+
 def _write_result(here: str, payload: Dict[str, Any]) -> str:
     """logs/e2e/ 에 텍스트/JSON 결과만 저장(이미지/영상 저장 금지)."""
     import json
@@ -834,9 +980,22 @@ def parse_args(argv=None):
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--preflight", action="store_true", help="연결/설정/모델/Supabase 점검만")
     mode.add_argument("--single", action="store_true", help="burst 1회 → 전체 파이프라인 1회")
-    mode.add_argument("--duration", type=float, metavar="MIN", help="N분 반복 실행")
+    mode.add_argument("--duration", type=float, metavar="MIN",
+                      help="N분 반복 실행(--duration 0 은 --forever 와 동일하게 무기한)")
+    mode.add_argument("--forever", action="store_true",
+                      help="무기한 반복(= --duration 0). 상시 실행용")
+    mode.add_argument("--verify-accumulation", action="store_true",
+                      help="ai_rule_decisions 누적을 읽기 전용으로 확인(저장/캡처 없음)")
     p.add_argument("--interval", type=float, default=DEFAULT_INTERVAL_SECONDS,
-                   help=f"duration 반복 간격(초, 최소 {MIN_INTERVAL_SECONDS})")
+                   help=f"duration/forever 반복 간격(초, 최소 {MIN_INTERVAL_SECONDS})")
+    p.add_argument("--limit", type=int, default=50,
+                   help="--verify-accumulation 조회 개수(기본 50)")
+    p.add_argument("--preview", action="store_true",
+                   help="각 tick 판정 후 preview clip 자동 생성(카메라 순차 재오픈, DB 미저장)")
+    p.add_argument("--preview-seconds", type=float, default=5.0,
+                   help="preview clip 길이(초, 기본 5)")
+    p.add_argument("--preview-ttl", type=float, default=None,
+                   help="preview TTL(초). 미지정 시 max(120, interval+30) 자동 보정")
     p.add_argument("--save", action="store_true", help="RuleDecision 을 Supabase 에 저장")
     p.add_argument("--engines", default=",".join(DEFAULT_ENGINES),
                    help="실행 엔진 CSV (기본 opencv). 예: opencv,mediapipe,yolo")
@@ -870,20 +1029,31 @@ def main(argv=None) -> int:
         _print_preflight(preflight(args.seat, args.save, args.fake))
         return 0
 
+    # --verify-accumulation: 읽기 전용. save/preview 와 함께 오면 명확히 에러(read-only 보장).
+    if args.verify_accumulation:
+        if args.save or args.preview:
+            print("[!] --verify-accumulation 은 읽기 전용입니다. "
+                  "--save / --preview 와 함께 사용할 수 없습니다.")
+            return 2
+        _print_accumulation(verify_accumulation(args.seat, args.limit))
+        return 0
+
     runner = Seat1E2ERunner(seat=args.seat, engines=engines, fake=args.fake,
                             save=bool(args.save), camera_seconds=args.camera_seconds,
-                            debug_metrics=bool(args.debug_metrics))
+                            debug_metrics=bool(args.debug_metrics),
+                            preview=bool(args.preview),
+                            preview_seconds=args.preview_seconds,
+                            preview_ttl=args.preview_ttl)
 
-    if args.duration is not None:
+    # --forever 또는 --duration 0 → 무기한. (mode 그룹이라 동시 지정은 argparse 가 차단)
+    forever = bool(args.forever) or (args.duration is not None and args.duration == 0)
+    if args.duration is not None or forever:
         if args.interval < MIN_INTERVAL_SECONDS:
             print(f"[!] interval {args.interval}s < 최소 {MIN_INTERVAL_SECONDS}s "
                   f"→ {MIN_INTERVAL_SECONDS}s 로 보정")
-        summary = runner.run_duration(args.duration, args.interval)
-        print("===== Duration Summary =====")
-        print(f"  total_runs: {summary['total_runs']}  saved: {summary['saved']}  "
-              f"interval: {summary['interval_seconds']}s")
-        print(f"  activity_counts: {summary['activity_counts']}")
-        print("  dashboard_stabilized_candidate: 3회 이상 저장 시 대시보드에 안정화 후보 표시")
+        minutes = args.duration if (args.duration is not None and not forever) else 0.0
+        summary = runner.run_duration(minutes, args.interval, forever=forever)
+        _print_duration_summary(summary, bool(args.save), bool(args.preview))
         if args.debug_metrics and summary["runs"] and summary["runs"][-1].get("debug_metrics"):
             print("  (아래는 마지막 run 기준 debug metrics)")
             _print_debug_metrics(summary["runs"][-1]["debug_metrics"])
@@ -893,8 +1063,15 @@ def main(argv=None) -> int:
             print(f"  result saved: {_write_result(here, summary)}")
         return 0
 
-    # 기본/--single
+    # 기본/--single (--preview 동반 시 카메라 shutdown 후 1회 순차 캡처)
     result = runner.run_once()
+    if args.preview:
+        try:
+            meta = runner._build_capturer(args.interval).capture()
+            print(f"  preview: status={meta.get('status')} "
+                  f"expires_at={meta.get('expires_at')}")
+        except Exception as exc:
+            print(f"  preview capture 실패(무시): {type(exc).__name__}: {exc}")
     _print_single(result)
     if args.write_result:
         print(f"  result saved: {_write_result(here, result)}")

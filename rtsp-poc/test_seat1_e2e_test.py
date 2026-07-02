@@ -268,6 +268,256 @@ def test_debug_metrics_yolo_status_notrequested_opencv_only():
     print("PASS debug_metrics(object): opencv 단독 → yolo NOT_REQUESTED")
 
 
+# ==========================================================================
+# v0.7 — 반복 안정화(--preview / --forever / tick 격리 / --verify-accumulation)
+# ==========================================================================
+import pytest
+
+_NOOP_SLEEP = lambda _s: None  # noqa: E731 (테스트 전용 sleep 대체 — 무한 실행 방지)
+
+
+class _FakeCapturer:
+    """preview_clip_capture.PreviewClipCapturer 대체(테스트용). 실카메라/파일 없음."""
+
+    def __init__(self, statuses=None, raise_on=None):
+        self.captures = 0
+        self.cleanups = 0
+        self._statuses = list(statuses) if statuses else None
+        self._raise_on = set(raise_on or ())
+
+    def capture(self):
+        self.captures += 1
+        if self.captures in self._raise_on:
+            raise RuntimeError("capture boom")
+        if self._statuses:
+            status = self._statuses.pop(0) if self._statuses else "available"
+        else:
+            status = "available"
+        return {"status": status, "expires_at": "2026-07-02T00:00:00"}
+
+    def cleanup_expired(self):
+        self.cleanups += 1
+        return 0
+
+
+def _stub_run_once(activity="STUDYING", saved=False):
+    return {"activity": activity, "confidence": 0.9, "saved": saved, "errors": []}
+
+
+# ---- --forever / --duration 0 : 테스트는 반드시 max_ticks 로 상한 --------
+def test_forever_bounded_by_max_ticks():
+    runner = e2e.Seat1E2ERunner(seat="Seat1", fake=True)
+    runner.run_once = lambda: _stub_run_once()          # 실카메라 없이
+    summary = runner.run_duration(0.0, 30, forever=True, max_ticks=3, sleep_fn=_NOOP_SLEEP)
+    assert summary["forever"] is True
+    assert summary["total_runs"] == 3                    # max_ticks 상한에서 정지
+    assert summary["interrupted"] is False
+    print("PASS forever_bounded: --forever 는 테스트에서 max_ticks 로 상한")
+
+
+def test_duration_zero_is_forever_in_main(monkeypatch):
+    # --duration 0 이 무기한(forever) 경로로 들어가는지 확인(실행은 stub 로 상한)
+    captured = {}
+
+    def fake_run_duration(self, minutes, interval, *, forever=False, **kw):
+        captured["minutes"] = minutes
+        captured["forever"] = forever
+        return {"total_runs": 0, "saved": 0, "activity_counts": {}, "interval_seconds": interval,
+                "forever": forever, "interrupted": False, "tick_errors": 0,
+                "preview_errors": 0, "previews_generated": 0, "cleanup_removed": 0, "runs": []}
+
+    monkeypatch.setattr(e2e.Seat1E2ERunner, "run_duration", fake_run_duration)
+    rc = e2e.main(["--duration", "0", "--fake"])
+    assert rc == 0 and captured["forever"] is True
+    print("PASS duration_zero: --duration 0 → forever 경로")
+
+
+# ---- tick 예외 격리(run_once/preview/cleanup) -----------------------------
+def test_tick_exception_isolated_continues():
+    runner = e2e.Seat1E2ERunner(seat="Seat1", fake=True)
+    calls = {"n": 0}
+
+    def flaky_run_once():
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("tick2 boom")            # 2번째 tick 만 실패
+        return _stub_run_once()
+
+    runner.run_once = flaky_run_once
+    summary = runner.run_duration(0.0, 30, forever=True, max_ticks=3, sleep_fn=_NOOP_SLEEP)
+    assert summary["total_runs"] == 2                    # 성공 tick 만 기록
+    assert summary["tick_errors"] == 1                   # 실패 tick 격리
+    print("PASS tick_isolated: tick 예외가 루프 전체를 중단시키지 않음")
+
+
+def test_preview_capture_failure_counts_not_fatal():
+    cap = _FakeCapturer(statuses=["available", "error", "unavailable"])
+    runner = e2e.Seat1E2ERunner(seat="Seat1", fake=True, preview=True, preview_capturer=cap)
+    runner.run_once = lambda: _stub_run_once()
+    summary = runner.run_duration(0.0, 30, forever=True, max_ticks=3, sleep_fn=_NOOP_SLEEP)
+    assert summary["total_runs"] == 3                    # 루프는 계속
+    assert summary["previews_generated"] == 1            # available 1건
+    assert summary["preview_errors"] == 2                # error/unavailable 2건
+    assert cap.cleanups == 3                             # 매 tick cleanup 시도
+    print("PASS preview_fail: preview 실패는 preview_errors 로 기록, 루프 지속")
+
+
+def test_preview_capture_exception_isolated():
+    cap = _FakeCapturer(raise_on={2})                   # 2번째 capture 는 예외
+    runner = e2e.Seat1E2ERunner(seat="Seat1", fake=True, preview=True, preview_capturer=cap)
+    runner.run_once = lambda: _stub_run_once()
+    summary = runner.run_duration(0.0, 30, forever=True, max_ticks=3, sleep_fn=_NOOP_SLEEP)
+    assert summary["total_runs"] == 3
+    assert summary["preview_errors"] == 1               # 예외도 preview_errors
+    assert summary["previews_generated"] == 2
+    print("PASS preview_exc: preview capture 예외도 격리 + 카운트")
+
+
+# ---- 카메라 순차 접근(run_once 종료 후 capture) ---------------------------
+def test_preview_is_sequential_after_run_once():
+    events = []
+
+    class OrderedCap:
+        def capture(self):
+            events.append("capture"); return {"status": "available"}
+
+        def cleanup_expired(self):
+            events.append("cleanup"); return 0
+
+    runner = e2e.Seat1E2ERunner(seat="Seat1", fake=True, preview=True,
+                                preview_capturer=OrderedCap())
+
+    def rec_run_once():
+        events.append("run"); return _stub_run_once()
+
+    runner.run_once = rec_run_once
+    runner.run_duration(0.0, 30, forever=True, max_ticks=2, sleep_fn=_NOOP_SLEEP)
+    # tick 마다 run → capture → cleanup 순서(동시 오픈 없음, 순차 접근)
+    assert events == ["run", "capture", "cleanup", "run", "capture", "cleanup"]
+    print("PASS preview_sequential: run_once 종료 후 capture(카메라 순차)")
+
+
+# ---- --preview 만 있고 --save 없으면 DB insert 0건 -------------------------
+def test_preview_without_save_no_insert():
+    repo = FakeAIDecisionRepository()
+    cap = _FakeCapturer()
+    runner = e2e.Seat1E2ERunner(seat="Seat1", engines=["opencv", "mediapipe", "yolo"],
+                                fake=True, save=False, repository=repo,
+                                preview=True, preview_capturer=cap)
+    summary = runner.run_duration(0.0, 30, forever=True, max_ticks=3, sleep_fn=_NOOP_SLEEP)
+    assert summary["saved"] == 0
+    assert repo.health()["count"] == 0                  # insert 절대 없음
+    assert cap.captures == 3                             # 클립은 매 tick 생성
+    print("PASS preview_no_save: --preview 만 → DB insert 0건")
+
+
+def test_save_with_preview_inserts_each_tick():
+    repo = FakeAIDecisionRepository()
+    cap = _FakeCapturer()
+    runner = e2e.Seat1E2ERunner(seat="Seat1", engines=["opencv", "mediapipe", "yolo"],
+                                fake=True, save=True, repository=repo,
+                                preview=True, preview_capturer=cap)
+    summary = runner.run_duration(0.0, 30, forever=True, max_ticks=2, sleep_fn=_NOOP_SLEEP)
+    assert summary["saved"] == 2 and repo.health()["count"] == 2   # append-only 누적
+    print("PASS save_preview: --save 동반 시 tick 마다 insert 누적")
+
+
+# ---- KeyboardInterrupt → 요약 후 정상 종료 --------------------------------
+def test_keyboard_interrupt_graceful_summary():
+    runner = e2e.Seat1E2ERunner(seat="Seat1", fake=True)
+    calls = {"n": 0}
+
+    def ki_run_once():
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise KeyboardInterrupt()
+        return _stub_run_once()
+
+    runner.run_once = ki_run_once
+    summary = runner.run_duration(0.0, 30, forever=True, max_ticks=10, sleep_fn=_NOOP_SLEEP)
+    assert summary["interrupted"] is True               # 정상 종료 플래그
+    assert summary["total_runs"] == 1                   # 1번째만 완료
+    print("PASS keyboard_interrupt: 요약 출력 후 정상 종료")
+
+
+# ---- TTL 보정 max(120, interval+30) --------------------------------------
+def test_preview_ttl_boot():
+    r = e2e.Seat1E2ERunner(seat="Seat1", preview=True, preview_seconds=5)
+    assert r._build_capturer(interval=60).ttl_seconds == 120.0     # max(120, 90)
+    assert r._build_capturer(interval=200).ttl_seconds == 230.0    # max(120, 230)
+    r2 = e2e.Seat1E2ERunner(seat="Seat1", preview=True, preview_ttl=999)
+    assert r2._build_capturer(interval=60).ttl_seconds == 999.0    # 명시 TTL 우선
+    print("PASS preview_ttl: TTL=max(120, interval+30), 명시값 우선")
+
+
+# ---- --verify-accumulation 읽기 전용 --------------------------------------
+class _ReadOnlyStubRepo:
+    def __init__(self, rows):
+        self.rows = rows
+        self.saved = 0
+
+    def get_recent_by_seat(self, seat_id, limit=20):
+        return [r for r in self.rows if r.get("seat_id") == seat_id][:limit]
+
+    def save_decision(self, decision):                  # 호출되면 안 됨
+        self.saved += 1
+        return {"saved": True}
+
+
+def test_verify_accumulation_read_only():
+    rows = [
+        {"seat_id": "Seat1", "activity": "PHONE", "decided_at": "2026-07-02T09:00:00"},
+        {"seat_id": "Seat1", "activity": "UNKNOWN", "decided_at": "2026-07-02T09:01:00"},
+        {"seat_id": "Seat1", "activity": "ABSENT", "decided_at": "2026-07-02T09:02:00"},
+        {"seat_id": "Seat1", "activity": "PHONE", "decided_at": "2026-07-02T09:03:00"},
+    ]
+    stub = _ReadOnlyStubRepo(rows)
+    result = e2e.verify_accumulation("Seat1", limit=50, repository=stub)
+    assert stub.saved == 0                              # write 절대 없음
+    assert result["total_rows"] == 4
+    assert result["activity_counts"] == {"PHONE": 2, "UNKNOWN": 1, "ABSENT": 1}
+    assert result["earliest_decided_at"] == "2026-07-02T09:00:00"
+    assert result["latest_decided_at"] == "2026-07-02T09:03:00"
+    print("PASS verify_accumulation: 읽기 전용 집계(PHONE/UNKNOWN/ABSENT)")
+
+
+def test_verify_accumulation_rejects_save_and_preview():
+    # main() 에서 --verify-accumulation + --save/--preview 는 명확히 에러(rc=2)
+    assert e2e.main(["--verify-accumulation", "--save", "--fake"]) == 2
+    assert e2e.main(["--verify-accumulation", "--preview", "--fake"]) == 2
+    print("PASS verify_guard: --verify-accumulation 은 --save/--preview 와 배타(rc=2)")
+
+
+# ---- CLI 파서/배타 옵션 ---------------------------------------------------
+def test_parse_new_options():
+    a = e2e.parse_args(["--forever", "--preview", "--preview-seconds", "7",
+                        "--preview-ttl", "300", "--interval", "90"])
+    assert a.forever and a.preview and a.preview_seconds == 7.0
+    assert a.preview_ttl == 300.0 and a.interval == 90.0
+    b = e2e.parse_args(["--verify-accumulation", "--limit", "10"])
+    assert b.verify_accumulation is True and b.limit == 10
+    print("PASS parse_new: --forever/--preview*/--verify-accumulation/--limit 파싱")
+
+
+def test_mode_group_mutually_exclusive():
+    # --forever 와 --duration 동시 지정은 argparse 가 차단
+    with pytest.raises(SystemExit):
+        e2e.parse_args(["--forever", "--duration", "5"])
+    with pytest.raises(SystemExit):
+        e2e.parse_args(["--verify-accumulation", "--single"])
+    print("PASS mode_group: 반복/검증 모드 상호 배타")
+
+
+def test_no_side_effects_in_source_still_clean():
+    # v0.7 추가 코드에도 금지 토큰이 없어야 한다(회귀)
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "seat1_e2e_test.py"), "r", encoding="utf-8") as f:
+        src = f.read().lower()
+    for tok in [".update(", ".delete(", ".upload(", "imwrite", "videowriter"]:
+        assert tok not in src, f"seat1_e2e_test.py 에 금지 토큰 '{tok}'"
+    print("PASS no_side_effects_v07: v0.7 코드에도 update/delete/영상저장 없음")
+
+
 def main():
     test_mask_rtsp()
     test_preflight_safe_and_no_secret()
@@ -288,9 +538,25 @@ def main():
     test_debug_metrics_off_by_default()
     test_debug_metrics_object_fields_with_yolo()
     test_debug_metrics_yolo_status_notrequested_opencv_only()
+    # v0.7 (monkeypatch fixture 필요한 test_duration_zero_is_forever_in_main 은 pytest 로만 실행)
+    test_forever_bounded_by_max_ticks()
+    test_tick_exception_isolated_continues()
+    test_preview_capture_failure_counts_not_fatal()
+    test_preview_capture_exception_isolated()
+    test_preview_is_sequential_after_run_once()
+    test_preview_without_save_no_insert()
+    test_save_with_preview_inserts_each_tick()
+    test_keyboard_interrupt_graceful_summary()
+    test_preview_ttl_boot()
+    test_verify_accumulation_read_only()
+    test_verify_accumulation_rejects_save_and_preview()
+    test_parse_new_options()
+    test_mode_group_mutually_exclusive()
+    test_no_side_effects_in_source_still_clean()
     print("\nALL PASS: mask / preflight / single / skipped_engine / no_save / save / "
           "save_fail / duration / no_side_effects / intact / truthy / read_seat_enabled / "
-          "preflight_enabled / debug_metrics / debug_metrics(object)")
+          "preflight_enabled / debug_metrics / debug_metrics(object) / "
+          "v0.7(forever/tick격리/preview/verify-accumulation)")
 
 
 if __name__ == "__main__":
