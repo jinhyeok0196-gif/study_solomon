@@ -669,6 +669,152 @@ def test_parse_perf_log_flag():
     print("PASS parse_perf_log: --perf-log/--no-perf-log 파싱(기본 켜짐)")
 
 
+# ==========================================================================
+# v0.8 P1 — drift-aware scheduler. 주입 가능한 단조 시계로 결정론적 검증.
+#   sleep_fn 은 fake clock 을 전진시켜 실제 타임라인을 시뮬레이션(무한 실행 없음).
+# ==========================================================================
+class _FakeClock:
+    """monotonic_fn/sleep_fn 주입용 결정론 시계. run_once 가 work 만큼 전진시킨다."""
+
+    def __init__(self):
+        self.t = 0.0
+
+    def monotonic(self):
+        return self.t
+
+    def sleep(self, secs):          # sleep_fn: 실제 sleep 대신 시계만 전진
+        self.t += float(secs)
+
+    def advance(self, secs):        # run_once 작업시간 시뮬레이션
+        self.t += float(secs)
+
+
+def _clocked_runner(clock, work):
+    """run_once 가 매 tick clock 을 work 초 전진시키는 runner(실카메라/DB 없음)."""
+    runner = e2e.Seat1E2ERunner(seat="Seat1", fake=True)
+
+    def _run_once():
+        clock.advance(work)         # tick_start_mono → tick_end_mono 사이에서 호출됨
+        return _stub_run_once()
+
+    runner.run_once = _run_once
+    return runner
+
+
+def test_drift_aware_sleep_subtracts_work_time():
+    # 작업(work) < interval → sleep ≈ interval - work, late ≈ 0, overrun False
+    clock = _FakeClock()
+    interval, work = 60.0, 19.5
+    runner = _clocked_runner(clock, work)
+    summary = runner.run_duration(0.0, interval, forever=True, max_ticks=4,
+                                  sleep_fn=clock.sleep, monotonic_fn=clock.monotonic)
+    samples = summary["perf_samples"]
+    # 마지막 tick 은 max_ticks 도달로 sleep 안 함(0). 그 외 tick 은 interval-work 만큼 sleep.
+    for s in samples[:-1]:
+        assert abs(s["sleep_until_next_tick_duration"] - (interval - work)) < 1e-6, s
+    assert samples[-1]["sleep_until_next_tick_duration"] == 0.0
+    for s in samples:
+        assert s["tick_started_late_by_seconds"] < 1e-6                 # grid 정시 시작
+        assert s["scheduler_overrun"] is False
+        assert s["schedule_drift_seconds"] == 0.0
+    print("PASS drift_sleep: 작업<interval → sleep≈interval-work, drift 0, 정시 시작")
+
+
+def test_drift_aware_no_accumulation_across_ticks():
+    # fixed sleep 였다면 tick 시작이 (n-1)*(interval+work) 로 누적 지연.
+    # drift-aware 는 tick n 이 정확히 (n-1)*interval 에 시작해야 한다(누적 없음, late≈0).
+    clock = _FakeClock()
+    interval, work = 60.0, 19.5
+    max_ticks = 5
+    runner = _clocked_runner(clock, work)
+    summary = runner.run_duration(0.0, interval, forever=True, max_ticks=max_ticks,
+                                  sleep_fn=clock.sleep, monotonic_fn=clock.monotonic)
+    for s in summary["perf_samples"]:
+        assert s["tick_started_late_by_seconds"] < 1e-6                 # 모든 tick 정시 시작
+    # N tick = (N-1) sleep + N work. 마지막 tick 후 sleep 없음 → t=(N-1)*interval+work.
+    assert abs(clock.t - ((max_ticks - 1) * interval + work)) < 1e-6, clock.t
+    # fixed-sleep(cycle=interval+work) 였다면 t=N*work+(N-1)*interval 로 더 컸다.
+    assert clock.t < max_ticks * work + (max_ticks - 1) * interval
+    print("PASS drift_no_accum: tick 시작이 grid 에 정렬(작업시간 누적 없음)")
+
+
+def test_drift_aware_overrun_zero_sleep_and_records_drift():
+    # 작업 > interval → sleep=0, overrun True. 고정 grid 라 overrun 은 tick 마다 누적된다.
+    #   tick n: drift = n*(work-interval), late = (n-1)*(work-interval).
+    clock = _FakeClock()
+    interval, work = 60.0, 75.0
+    over = work - interval                                             # 15.0
+    runner = _clocked_runner(clock, work)
+    summary = runner.run_duration(0.0, interval, forever=True, max_ticks=3,
+                                  sleep_fn=clock.sleep, monotonic_fn=clock.monotonic)
+    for i, s in enumerate(summary["perf_samples"]):
+        n = i + 1
+        assert s["sleep_until_next_tick_duration"] == 0.0              # negative sleep 아님
+        assert s["scheduler_overrun"] is True
+        assert abs(s["schedule_drift_seconds"] - n * over) < 1e-6, s
+        assert abs(s["tick_started_late_by_seconds"] - (n - 1) * over) < 1e-6, s
+    assert summary["perf_summary"]["scheduler_overrun_count"] == 3
+    print("PASS drift_overrun: 작업>interval → sleep 0, overrun/late 누적 기록")
+
+
+def test_drift_aware_duration_mode_no_fixed_sleep_accumulation():
+    # duration 모드에서 fixed sleep(작업+interval) 로 누적 지연되지 않는지.
+    clock = _FakeClock()
+    interval, work = 30.0, 5.0
+    runner = _clocked_runner(clock, work)
+    # deadline = 1.5분 = 90초. grid(0,30,60,90) 기준 tick 이 4회 실행돼야 한다.
+    summary = runner.run_duration(1.5, interval, sleep_fn=clock.sleep,
+                                  monotonic_fn=clock.monotonic)
+    # fixed-sleep(cycle=interval+work=35) 였다면 90초에 3회. drift-aware(cycle=interval)는 더 많음.
+    assert summary["total_runs"] >= 4, summary["total_runs"]
+    for s in summary["perf_samples"]:
+        assert s["tick_started_late_by_seconds"] < 1e-6               # 정시 시작(누적 없음)
+    print("PASS drift_duration: duration 모드도 작업시간 누적 지연 없음")
+
+
+def test_scheduler_perf_fields_present_in_samples_and_summary():
+    clock = _FakeClock()
+    runner = _clocked_runner(clock, 5.0)
+    summary = runner.run_duration(0.0, 60.0, forever=True, max_ticks=2,
+                                  sleep_fn=clock.sleep, monotonic_fn=clock.monotonic)
+    for s in summary["perf_samples"]:
+        for k in ("scheduled_tick_start_at", "actual_tick_start_at",
+                  "next_scheduled_tick_start_at", "tick_started_late_by_seconds",
+                  "total_tick_duration", "sleep_until_next_tick_duration",
+                  "schedule_drift_seconds", "scheduler_overrun"):
+            assert k in s, k
+    ps = summary["perf_summary"]
+    for k in ("avg_tick_started_late_by_seconds", "max_tick_started_late_by_seconds",
+              "scheduler_overrun_count"):
+        assert k in ps, k
+    print("PASS scheduler_fields: sample/summary 에 scheduler perf 필드 포함")
+
+
+def test_drift_aware_save_gating_and_read_only_verify():
+    # drift-aware 루프에서도 --save 일 때만 insert(append-only), verify 는 read-only 유지.
+    c1 = _FakeClock()
+    repo_off = FakeAIDecisionRepository()
+    r_off = e2e.Seat1E2ERunner(seat="Seat1", engines=["opencv"], fake=True,
+                               save=False, repository=repo_off)
+    r_off.run_duration(0.0, 60.0, forever=True, max_ticks=3,
+                       sleep_fn=c1.sleep, monotonic_fn=c1.monotonic)
+    assert repo_off.health()["count"] == 0                            # --save 없음 → insert 0
+
+    c2 = _FakeClock()
+    repo_on = FakeAIDecisionRepository()
+    r_on = e2e.Seat1E2ERunner(seat="Seat1", engines=["opencv"], fake=True,
+                              save=True, repository=repo_on)
+    r_on.run_duration(0.0, 60.0, forever=True, max_ticks=3,
+                      sleep_fn=c2.sleep, monotonic_fn=c2.monotonic)
+    assert repo_on.health()["count"] == 3                             # tick 마다 insert 만
+
+    # verify_accumulation 은 select 만(insert/update/delete 없음) → count 불변
+    before = repo_on.health()["count"]
+    e2e.verify_accumulation("Seat1", limit=50, repository=repo_on)
+    assert repo_on.health()["count"] == before                        # read-only
+    print("PASS drift_gating: --save 만 insert, verify read-only(누적 없음)")
+
+
 def test_verify_accumulation_does_not_run_perf_loop(monkeypatch):
     called = {"run": False}
 
@@ -732,6 +878,13 @@ def main():
     test_perf_logging_enabled_reflects_flag()
     test_perf_log_line_format_and_prefix()
     test_parse_perf_log_flag()
+    # v0.8 P1 — drift-aware scheduler
+    test_drift_aware_sleep_subtracts_work_time()
+    test_drift_aware_no_accumulation_across_ticks()
+    test_drift_aware_overrun_zero_sleep_and_records_drift()
+    test_drift_aware_duration_mode_no_fixed_sleep_accumulation()
+    test_scheduler_perf_fields_present_in_samples_and_summary()
+    test_drift_aware_save_gating_and_read_only_verify()
     print("\nALL PASS: mask / preflight / single / skipped_engine / no_save / save / "
           "save_fail / duration / no_side_effects / intact / truthy / read_seat_enabled / "
           "preflight_enabled / debug_metrics / debug_metrics(object) / "

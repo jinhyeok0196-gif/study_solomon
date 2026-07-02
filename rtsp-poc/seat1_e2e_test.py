@@ -32,7 +32,7 @@ import re
 import sys
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 log = logging.getLogger("seat1_e2e")
@@ -85,12 +85,16 @@ PERF_STAGE_KEYS = (
 def _format_perf_line(s: Dict[str, Any]) -> str:
     """사람이 바로 읽는 한 줄 perf 요약. 접두사 '[perf <Seat>]'."""
     errs = int(bool(s.get("tick_error"))) + int(bool(s.get("preview_error")))
-    return ("[{pfx} {seat}] tick={t} total={tot}s drift={dr}s camera_start={cs}s "
+    return ("[{pfx} {seat}] tick={t} total={tot}s late={lt}s drift={dr}s overrun={ov} "
+            "camera_start={cs}s "
             "warmup={wu}s collect={col}s inference={inf}s save={sv}s camera_stop={cst}s "
             "preview_capture={pc}s transcode={tc}s cleanup={cl}s sleep={sl}s "
             "reconnects={rc} saved={sav} preview={pv} errors={er}").format(
         pfx=PERF_LOG_PREFIX, seat=s.get("seat_id"), t=s.get("tick_index"),
-        tot=_round1(s.get("total_tick_duration")), dr=_round1(s.get("schedule_drift_seconds")),
+        tot=_round1(s.get("total_tick_duration")),
+        lt=_round1(s.get("tick_started_late_by_seconds")),
+        dr=_round1(s.get("schedule_drift_seconds")),
+        ov=bool(s.get("scheduler_overrun")),
         cs=_round1(s.get("camera_start_wait")), wu=_round1(s.get("warmup_duration")),
         col=_round1(s.get("frame_collect_duration")), inf=_round1(s.get("inference_duration")),
         sv=_round1(s.get("supabase_save_duration")), cst=_round1(s.get("camera_stop_duration")),
@@ -108,9 +112,16 @@ def summarize_perf(samples: List[Dict[str, Any]], perf_logging_enabled: bool) ->
         return {"total_perf_samples": 0, "perf_logging_enabled": bool(perf_logging_enabled),
                 "avg_total_tick_duration": 0.0, "max_total_tick_duration": 0.0,
                 "avg_schedule_drift_seconds": 0.0, "max_schedule_drift_seconds": 0.0,
+                "avg_tick_started_late_by_seconds": 0.0,
+                "max_tick_started_late_by_seconds": 0.0,
+                "scheduler_overrun_count": 0,
                 "slowest_tick_index": None, "slowest_tick_breakdown": {}}
     totals = [float(s.get("total_tick_duration") or 0.0) for s in samples]
+    # v0.8 P1: drift 의미 변경 — 이제 "이번 tick 작업이 슬롯을 초과한 overrun 초"(정상 0).
+    #   (구 v0.8: 고정 sleep 탓 drift≈작업시간≈19s 상수. README/handoff 참고.)
     drifts = [float(s.get("schedule_drift_seconds") or 0.0) for s in samples]
+    lates = [float(s.get("tick_started_late_by_seconds") or 0.0) for s in samples]
+    overruns = sum(1 for s in samples if s.get("scheduler_overrun"))
     slowest = max(samples, key=lambda s: float(s.get("total_tick_duration") or 0.0))
     return {
         "total_perf_samples": len(samples),
@@ -119,6 +130,9 @@ def summarize_perf(samples: List[Dict[str, Any]], perf_logging_enabled: bool) ->
         "max_total_tick_duration": _round1(max(totals)),
         "avg_schedule_drift_seconds": _round1(sum(drifts) / len(drifts)),
         "max_schedule_drift_seconds": _round1(max(drifts)),
+        "avg_tick_started_late_by_seconds": _round1(sum(lates) / len(lates)),
+        "max_tick_started_late_by_seconds": _round1(max(lates)),
+        "scheduler_overrun_count": overruns,
         "slowest_tick_index": slowest.get("tick_index"),
         "slowest_tick_breakdown": {k: _round3(slowest.get(k)) for k in PERF_STAGE_KEYS},
     }
@@ -758,19 +772,36 @@ class Seat1E2ERunner:
     def run_duration(self, minutes: float, interval: float, *,
                      forever: bool = False,
                      max_ticks: Optional[int] = None,
-                     sleep_fn=time.sleep) -> Dict[str, Any]:
+                     sleep_fn=time.sleep,
+                     monotonic_fn=time.monotonic) -> Dict[str, Any]:
         """N분(또는 무기한) 반복 판정. 각 tick 예외 격리 + (선택) preview clip 생성.
 
         - forever=True (또는 --duration 0): deadline 없이 무기한 반복.
         - max_ticks: 테스트에서 무한 실행 방지용 상한(운영 CLI 는 미지정).
         - sleep_fn: 테스트 주입용(기본 time.sleep). 실제 sleep 없이 루프 검증.
+        - monotonic_fn: 스케줄링 기준 시계(기본 time.monotonic). 테스트에서 가짜 시계 주입.
         - tick 격리: run_once / save / preview capture / cleanup_expired 실패가
           루프 전체를 중단시키지 않는다. preview 실패는 preview_errors 로만 기록.
         - KeyboardInterrupt: 요약 출력 후 정상 종료(interrupted=True).
         - append-only: 저장은 run_once() 내부의 save_decision(insert) 뿐. update/delete 없음.
+
+        v0.8 P1 — drift-aware scheduler:
+          - wall-clock(monotonic) 고정 grid 기준으로 매 interval 초마다 tick 시작을 목표.
+          - tick n 예정 시작 = loop_start + (n-1)*interval, 다음 예정 = loop_start + n*interval.
+          - tick 작업 후 sleep = max(0, 다음 예정 시작 - now). 작업<interval 이면
+            작업시간을 제외한 남은 시간만 sleep → cycle 이 interval 로 수렴.
+          - 작업>interval 이면 sleep=0, scheduler_overrun=True, schedule_drift_seconds 에
+            초과분(다음 tick 이 밀리는 양)을 기록(negative sleep 대신 drift 기록).
         """
         interval = max(MIN_INTERVAL_SECONDS, float(interval))
-        deadline = None if forever else time.time() + minutes * 60.0
+        # 스케줄링/deadline 은 단조 시계 기준(시스템 시각 점프 무관, 테스트 주입 가능).
+        loop_start_mono = monotonic_fn()
+        loop_start_wall = datetime.now()  # "_at" ISO 표기 anchor(가독성용, 스케줄 계산은 mono)
+        deadline = None if forever else loop_start_mono + minutes * 60.0
+
+        def _sched_iso(offset_seconds: float) -> str:
+            """loop 시작 wall-clock 기준 offset 초를 ISO 문자열로(사람용 표기)."""
+            return (loop_start_wall + timedelta(seconds=float(offset_seconds))).isoformat()
 
         capturer = self._build_capturer(interval) if self.preview else None
 
@@ -787,11 +818,18 @@ class Seat1E2ERunner:
             return max_ticks is not None and n >= max_ticks
 
         def _past_deadline() -> bool:
-            return deadline is not None and time.time() > deadline
+            return deadline is not None and monotonic_fn() > deadline
 
         try:
             while not _reached_limit() and not _past_deadline():
                 n += 1
+                # ---- v0.8 P1 drift-aware: 이 tick 의 고정 grid 예정 시작 ----
+                #   tick n 예정 시작 = loop_start + (n-1)*interval (단조 시계 기준).
+                scheduled_start_off = (n - 1) * interval
+                scheduled_start_mono = loop_start_mono + scheduled_start_off
+                tick_start_mono = monotonic_fn()
+                # 이번 tick 이 예정보다 얼마나 늦게 시작했는가(정상 0, overrun 누적 시 증가).
+                tick_started_late_by = max(0.0, tick_start_mono - scheduled_start_mono)
                 # ---- v0.8 tick 계측 시작(동작 순서/구조는 그대로) ----
                 tick_perf0 = time.perf_counter()
                 tick_error = False
@@ -849,26 +887,39 @@ class Seat1E2ERunner:
 
                 # 작업 소요(sleep 제외). 예외 tick 도 여기까지의 시간이 기록된다.
                 total_tick_duration = time.perf_counter() - tick_perf0
+                tick_end_mono = monotonic_fn()
 
-                # ---- sleep: 기존 고정 방식 유지(동작 변경 없음, 계측만) ----
+                # ---- v0.8 P1 drift-aware sleep ----
+                #   다음 tick(n+1) 고정 grid 예정 시작 = loop_start + n*interval.
+                #   sleep = max(0, 예정 - now). 작업이 짧으면 작업시간을 뺀 남은 시간만 sleep.
+                next_scheduled_off = n * interval
+                next_scheduled_mono = loop_start_mono + next_scheduled_off
+                raw_remaining = next_scheduled_mono - tick_end_mono
+                scheduler_overrun = raw_remaining < 0
+                # negative sleep 대신 초과분(다음 tick 이 밀리는 양)을 drift 로 기록.
+                schedule_drift = _round3(-raw_remaining) if scheduler_overrun else 0.0
+                sleep_target = 0.0 if scheduler_overrun else raw_remaining
+
                 do_sleep = not (_reached_limit() or _past_deadline())
-                if do_sleep and deadline is not None and time.time() + interval > deadline:
+                # 다음 예정 시작이 deadline 을 넘으면 더 이상 sleep/실행하지 않는다.
+                if do_sleep and deadline is not None and next_scheduled_mono > deadline:
                     do_sleep = False
+
                 sleep_dur = 0.0
                 if do_sleep:
-                    _t_sleep0 = time.perf_counter()
-                    sleep_fn(interval)
-                    sleep_dur = time.perf_counter() - _t_sleep0
-
-                # schedule_drift = (이번 tick 실제 주기) - 목표 interval.
-                # ⚠️ 고정 sleep(interval) 유지 → sleep≈interval → drift≈작업시간 초과분.
-                #    v0.8 은 개선이 아니라 관찰이 목적(1분 주기 정확도는 아직 미개선).
-                schedule_drift = (total_tick_duration + sleep_dur) - interval
+                    sleep_fn(sleep_target)
+                    sleep_dur = sleep_target
 
                 sample = {
                     "tick_index": n,
                     "seat_id": self.seat,
                     "tick_started_at": run_perf.get("tick_started_at"),
+                    # v0.8 P1 scheduler 필드(고정 grid 기준 관찰)
+                    "scheduled_tick_start_at": _sched_iso(scheduled_start_off),
+                    "actual_tick_start_at": _sched_iso(tick_start_mono - loop_start_mono),
+                    "next_scheduled_tick_start_at": _sched_iso(next_scheduled_off),
+                    "tick_started_late_by_seconds": _round3(tick_started_late_by),
+                    "scheduler_overrun": bool(scheduler_overrun),
                     "camera_start_wait": _round3(run_perf.get("camera_start_wait")),
                     "warmup_duration": _round3(run_perf.get("warmup_duration")),
                     "frame_collect_duration": _round3(run_perf.get("frame_collect_duration")),
@@ -1160,13 +1211,17 @@ def _print_perf_summary(ps: Optional[Dict[str, Any]]) -> None:
     print(f"  max_total_tick_duration: {ps.get('max_total_tick_duration')}")
     print(f"  avg_schedule_drift_seconds: {ps.get('avg_schedule_drift_seconds')}")
     print(f"  max_schedule_drift_seconds: {ps.get('max_schedule_drift_seconds')}")
+    print(f"  avg_tick_started_late_by_seconds: {ps.get('avg_tick_started_late_by_seconds')}")
+    print(f"  max_tick_started_late_by_seconds: {ps.get('max_tick_started_late_by_seconds')}")
+    print(f"  scheduler_overrun_count: {ps.get('scheduler_overrun_count')}")
     print(f"  slowest_tick_index: {ps.get('slowest_tick_index')}")
     breakdown = ps.get("slowest_tick_breakdown") or {}
     if breakdown:
         print("  slowest_tick_breakdown:")
         for k, v in breakdown.items():
             print(f"    {k}: {v}")
-    print("  ※ 고정 sleep(interval) 유지 → 1분 주기 정확도 미개선. 원인 관찰용 계측(v0.8).")
+    print("  ※ v0.8 P1 drift-aware: sleep=max(0, 다음 예정-now). drift=overrun 초(정상 0),")
+    print("     late=예정 대비 tick 시작 지연. 목표: wall-clock 기준 매 interval 초 tick 시작.")
 
 
 def _write_result(here: str, payload: Dict[str, Any]) -> str:

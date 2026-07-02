@@ -878,9 +878,23 @@ python seat1_e2e_test.py --duration 5 --interval 60 --save  # 5분 반복(최소
 python seat1_e2e_test.py --duration 60 --interval 60 --save --preview --seat Seat1   # v0.8 현장 재테스트(단계별 perf 로그)
 ```
 - `--perf-log`(v0.8, 기본 **켜짐**, `--no-perf-log` 로 끔): 각 tick 단계별 소요시간을 `[perf Seat1]` 한 줄 요약으로 로그하고,
-  종료 시 `perf_summary`(avg/max total tick, avg/max schedule_drift, slowest_tick_breakdown)를 출력한다.
-  **⚠️ v0.8 은 tick 지연 원인 "관찰(계측)" 단계다 — 스케줄링을 고치지 않는다.** 고정 sleep(interval) 방식은 그대로이며
-  1분 주기 정확도는 아직 미개선(개선 여부는 계측 결과로 별도 결정). 계측값은 수치/텍스트만 남기며 영상/프레임 저장 없음.
+  종료 시 `perf_summary`(avg/max total tick, avg/max schedule_drift, avg/max tick_started_late, scheduler_overrun_count, slowest_tick_breakdown)를 출력한다.
+  계측값은 수치/텍스트만 남기며 영상/프레임 저장 없음.
+
+#### v0.8 P1 — drift-aware scheduler (스케줄러 개선)
+- **구조 변경**: 기존 "tick 작업 → 고정 `sleep(interval)`" 을 **wall-clock 고정 grid** 로 교체했다.
+  - tick n 예정 시작 = `loop_start + (n-1)*interval`, 다음 예정 = `loop_start + n*interval`(단조 시계 `time.monotonic` 기준).
+  - tick 작업이 끝나면 `sleep = max(0, 다음 예정 시작 - now)` — **작업시간을 제외한 남은 시간만** sleep 한다.
+    예: interval=60, 작업 19.5초 → sleep ≈ 40.5초 → cycle 이 60초로 수렴(기존엔 작업+60 ≈ 79.5초였음).
+  - 작업시간이 interval 을 **초과**하면 sleep=0, `scheduler_overrun=True`, negative sleep 대신 초과분을 `schedule_drift_seconds` 로 기록한다.
+- **`schedule_drift_seconds` 의미 변경(중요)**:
+  - **구 v0.8**: 고정 sleep 탓 `drift ≈ 작업시간 초과분 ≈ 19~20초`가 **상수처럼** 찍혔다(주기가 늘 밀렸다는 뜻).
+  - **P1 이후**: drift 는 "이번 tick 작업이 슬롯(interval)을 넘긴 **overrun 초**"다. 작업 < interval 이면 **정상값 0**.
+    고정 grid 라 계속 overrun 하면 drift/late 는 누적된다(`drift(n)=tick_end - 다음예정`, `late(n)=tick_start - 예정시작`).
+- **새 perf 필드**: `scheduled_tick_start_at`, `actual_tick_start_at`, `next_scheduled_tick_start_at`,
+  `tick_started_late_by_seconds`, `scheduler_overrun`(bool). 기존 `total_tick_duration`/`sleep_until_next_tick_duration`/`schedule_drift_seconds` 유지(의미만 상기대로 변경).
+- 동작 보존: `--save` 일 때만 insert(append-only), `--verify-accumulation` read-only, preview 는 local temporary,
+  AI advisory-only, 학생 상태/출결/벌점/알림 자동 변경 없음.
 - `--camera-seconds`(real, 기본 **10초**, 최소 1): RTSP warm-up + 프레임 수집 시간. **frames=0 이면 늘리세요**(예: 15~20).
   warm-up 동안 2초마다 **연결 성공/실패·buffer_len·frames_received·last_frame_age·마지막 프레임 시각(last_ts)** 을 자세히 로그한다(영상/이미지 저장 없음, 수치/시각만).
 - `--engines` 기본 `opencv`. MediaPipe/YOLO 는 모델/라이브러리 없으면 SKIPPED(전체 실패 아님) → FactsFusion 이 SUCCESS/PARTIAL 처리.
